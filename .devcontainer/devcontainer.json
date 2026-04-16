@@ -7,6 +7,9 @@
     "shutdownAction": "stopCompose",
     "customizations": {
         "vscode": {
+            "settings": {
+                "terminal.integrated.shell.linux": "zsh"
+            },
             "extensions": [
                 "cschlosser.doxdocgen",
                 "augustocdias.tasks-shell-input",
@@ -14,7 +17,9 @@
                 "njpwerner.autodocstring",
                 "ms-python.vscode-pylance",
                 "donjayamanne.githistory",
-                "mhutchie.git-graph"
+                "mhutchie.git-graph",
+                "ms-vscode.cmake-tools",
+                "llvm-vs-code-extensions.vscode-clangd"
             ]
         },
         "jetbrains": {

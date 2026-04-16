@@ -1,0 +1,14 @@
+{
+    // "cmake.configureEnvironment": {
+    //     "AMENT_PREFIX_PATH": "/opt/conda"
+    // },
+    "clangd.path": "clangd",
+    "clangd.arguments": [
+        "--query-driver=/opt/conda/bin/clang"
+    ],
+    // 3. 强制生成 compile_commands.json (用于代码补全
+    "cmake.useCMakePresets": "always",
+    "cmake.copyCompileCommands": "${workspaceFolder}/build/compile_commands.json",
+    "C_Cpp.autocomplete": "disabled"
+    // "cmake.sourceDirectory": "/home/Elaina/ros2_ws/src/cmake_test",
+}
