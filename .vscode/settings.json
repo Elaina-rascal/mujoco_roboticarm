@@ -2,9 +2,13 @@
     // "cmake.configureEnvironment": {
     //     "AMENT_PREFIX_PATH": "/opt/conda"
     // },
+    // 1. 关闭保存时自动格式化全文档 (这是你现在想关掉的)
+    "editor.formatOnSave": false,
+    // 2. 开启复制粘贴时自动格式化
+    "editor.formatOnPaste": true,
     "clangd.path": "clangd",
     "clangd.arguments": [
-        "--query-driver=/opt/conda/bin/clang"
+        "--header-insertion=never",
     ],
     // 3. 强制生成 compile_commands.json (用于代码补全
     "cmake.useCMakePresets": "always",

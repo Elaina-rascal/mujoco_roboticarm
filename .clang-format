@@ -1,0 +1,25 @@
+---
+BasedOnStyle: Google
+IndentWidth: 2
+ColumnLimit: 100
+
+# 核心：强制大括号换行
+BreakBeforeBraces: Allman
+
+# 必须显式关闭所有“缩成一行”的干扰项
+AllowShortBlocksOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AllowShortLambdasOnASingleLine: None
+
+# 构造函数初始化列表的对齐（可选，根据你的截图习惯）
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+PackConstructorInitializers: Never
+
+# 指针左对齐
+DerivePointerAlignment: false
+PointerAlignment: Left
+
+SortIncludes: true
+---
