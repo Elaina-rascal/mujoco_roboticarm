@@ -13,7 +13,22 @@ find_package(sensor_msgs REQUIRED)
 find_package(pinocchio REQUIRED) # 新增 Pinocchio 依赖
 # 编译可执行文件
 add_executable(invkinematic src/invkinematic.cpp)
-
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(invkinematic PRIVATE -ftime-trace)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    # GCC 10+ 确实支持 -ftime-trace，如果报错，尝试使用 report 作为替代
+    # 或者检查是否有字符编码问题。这里我们先换成兼容性最好的 report
+    # target_compile_options(invkinematic PRIVATE -ftime-report)
+endif()
+target_precompile_headers(invkinematic PRIVATE 
+    <Eigen/Dense>
+    <rclcpp/rclcpp.hpp>
+    <pinocchio/algorithm/frames.hpp>
+    <pinocchio/algorithm/jacobian.hpp>
+    <pinocchio/algorithm/kinematics.hpp>
+    <pinocchio/algorithm/joint-configuration.hpp>
+    <pinocchio/parsers/mjcf.hpp>
+)
 target_link_libraries(invkinematic 
   rclcpp::rclcpp
   pinocchio::pinocchio # 链接 Pinocchio 库

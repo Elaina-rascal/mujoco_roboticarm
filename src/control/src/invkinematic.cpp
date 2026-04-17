@@ -1,20 +1,17 @@
-#include <Eigen/Dense>
-
 #include <filesystem>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
-
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 
-#include "pinocchio/algorithm/frames.hpp"
-#include "pinocchio/algorithm/jacobian.hpp"
-#include "pinocchio/algorithm/kinematics.hpp"
-#include "pinocchio/algorithm/joint-configuration.hpp"
-#include "pinocchio/parsers/mjcf.hpp"
+// #include <pinocchio/algorithm/frames.hpp>
+// #include <pinocchio/algorithm/jacobian.hpp>
+// #include <pinocchio/algorithm/kinematics.hpp>
+// #include <pinocchio/algorithm/joint-configuration.hpp>
+// #include <pinocchio/parsers/mjcf.hpp>
 
 using joint_state_msg = sensor_msgs::msg::JointState;
 namespace fs = std::filesystem;

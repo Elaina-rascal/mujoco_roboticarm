@@ -13,6 +13,7 @@
     // 3. 强制生成 compile_commands.json (用于代码补全
     "cmake.useCMakePresets": "always",
     "cmake.copyCompileCommands": "${workspaceFolder}/build/compile_commands.json",
+    "cmake.loggingLevel": "info",
     "C_Cpp.autocomplete": "disabled"
     // "cmake.sourceDirectory": "/home/Elaina/ros2_ws/src/cmake_test",
 }
