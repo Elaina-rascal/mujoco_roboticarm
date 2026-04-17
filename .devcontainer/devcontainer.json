@@ -19,7 +19,8 @@
                 "donjayamanne.githistory",
                 "mhutchie.git-graph",
                 "ms-vscode.cmake-tools",
-                "llvm-vs-code-extensions.vscode-clangd"
+                "llvm-vs-code-extensions.vscode-clangd",
+                "ms-vscode.cpptools"
             ]
         },
         "jetbrains": {

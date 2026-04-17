@@ -6,7 +6,7 @@ project(ros2_plain_cmake)
 # 设置 C++ 标准（ROS2 必须 C++17）
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_BINARY_DIR ${CMAKE_SOURCE_DIR}/build)
+
 # 直接查找 ROS2 核心依赖（纯 CMake 方式）
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)

@@ -1,193 +1,128 @@
 #include <filesystem>
-#include <memory>
-#include <stdexcept>
-#include <string>
-#include <unordered_map>
-#include <vector>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <unordered_map>
 
-// #include <pinocchio/algorithm/frames.hpp>
-// #include <pinocchio/algorithm/jacobian.hpp>
-// #include <pinocchio/algorithm/kinematics.hpp>
-// #include <pinocchio/algorithm/joint-configuration.hpp>
-// #include <pinocchio/parsers/mjcf.hpp>
+// 包含必要的 Pinocchio 头文件
+#include <pinocchio/algorithm/frames.hpp>
+#include <pinocchio/algorithm/jacobian.hpp>
+#include <pinocchio/algorithm/joint-configuration.hpp>
+#include <pinocchio/algorithm/kinematics.hpp>
+#include <pinocchio/parsers/mjcf.hpp>
 
-using joint_state_msg = sensor_msgs::msg::JointState;
+using namespace pinocchio;
 namespace fs = std::filesystem;
 
-class ReceiveNode : public rclcpp::Node {
+class SimpleIK : public rclcpp::Node {
 public:
-  ReceiveNode() : Node("receive_node") {
-    declare_parameter<std::vector<double>>("target_position", {0.35, -0.15, 0.35});
-    declare_parameter<std::string>("end_effector_frame", "attachment_site");
-    declare_parameter<double>("damping", 1e-3);
-    declare_parameter<double>("step_size", 0.5);
-    declare_parameter<double>("tolerance", 1e-4);
-    declare_parameter<int>("max_iterations", 20);
-    declare_parameter<std::string>("joint_states_topic", "/joint_states");
-    declare_parameter<std::string>("ik_command_topic", "/ik_joint_target");
+  SimpleIK() : Node("simple_ik") {
+    // 1. 初始化路径与目标位姿
+    fs::path model_path =
+        fs::path(__FILE__).parent_path().parent_path() / "model" / "ur5e.xml";
 
-    target_position_ = get_parameter("target_position").as_double_array();
-    if (target_position_.size() != 3) {
-      throw std::runtime_error("target_position must contain exactly 3 values");
+    // 设定目标位姿
+    target_M_ =
+        SE3(Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.35, 0.15, 0.5));
+    ee_frame_name_ = "attachment_site";
+
+    // 2. 模型加载
+    model_ = std::make_shared<Model>();
+    mjcf::buildModel(model_path.string(), *model_);
+    data_ = std::make_unique<Data>(*model_);
+
+    // --- 新增：建立关节名称到 ID 的映射 ---
+    // i 从 1 开始，因为 0 通常是 universe
+    for (JointIndex i = 1; i < (JointIndex)model_->njoints; ++i) {
+      joint_name_to_id_[model_->names[i]] = i;
     }
 
-    end_effector_frame_ = get_parameter("end_effector_frame").as_string();
-    damping_ = get_parameter("damping").as_double();
-    step_size_ = get_parameter("step_size").as_double();
-    tolerance_ = get_parameter("tolerance").as_double();
-    max_iterations_ = get_parameter("max_iterations").as_int();
-    joint_states_topic_ = get_parameter("joint_states_topic").as_string();
-    ik_command_topic_ = get_parameter("ik_command_topic").as_string();
-
-    const fs::path model_path = fs::path(__FILE__).parent_path().parent_path() / "model" / "ur5e.xml";
-    RCLCPP_INFO(get_logger(), "Loading Pinocchio model from: %s", model_path.c_str());
-
-    pinocchio::Model model;
-    pinocchio::mjcf::buildModelFromXML(model_path.string(), model);
-    model_ = std::make_shared<pinocchio::Model>(std::move(model));
-    data_ = std::make_unique<pinocchio::Data>(*model_);
-
-    if (!model_->existFrame(end_effector_frame_)) {
-      throw std::runtime_error("end_effector_frame not found in Pinocchio model: " + end_effector_frame_);
+    if (!model_->existFrame(ee_frame_name_)) {
+      throw std::runtime_error("Frame not found: " + ee_frame_name_);
     }
-    end_effector_frame_id_ = model_->getFrameId(end_effector_frame_);
+    ee_id_ = model_->getFrameId(ee_frame_name_);
 
-    for (pinocchio::JointIndex joint_id = 1; joint_id < static_cast<pinocchio::JointIndex>(model_->njoints); ++joint_id) {
-      const std::string &joint_name = model_->names[joint_id];
-      if (!joint_name.empty()) {
-        joint_name_to_id_.emplace(joint_name, joint_id);
-      }
-    }
+    // 3. 通信
+    sub_ = create_subscription<sensor_msgs::msg::JointState>(
+        "/joint_states", 1,
+        std::bind(&SimpleIK::jointStateCallback, this, std::placeholders::_1));
+    pub_ =
+        create_publisher<sensor_msgs::msg::JointState>("/ik_joint_target", 10);
 
-    joint_sub_ = create_subscription<joint_state_msg>(
-      joint_states_topic_, rclcpp::SensorDataQoS(),
-      [this](const joint_state_msg::SharedPtr msg) { inverseKinematics(msg); });
-
-    ik_pub_ = create_publisher<joint_state_msg>(ik_command_topic_, 10);
-
-    RCLCPP_INFO(
-      get_logger(),
-      "IK target initialized. frame=%s target=[%.4f, %.4f, %.4f] damping=%.3e step=%.3f tol=%.3e max_iter=%d",
-      end_effector_frame_.c_str(), target_position_[0], target_position_[1], target_position_[2],
-      damping_, step_size_, tolerance_, max_iterations_);
+    RCLCPP_INFO(get_logger(), "IK Node initialized with Joint Mapping.");
   }
 
 private:
-  Eigen::VectorXd jointStateToConfiguration(const joint_state_msg &msg) const {
-    Eigen::VectorXd q = pinocchio::neutral(*model_);
-
-    for (std::size_t i = 0; i < msg.name.size() && i < msg.position.size(); ++i) {
-      const auto it = joint_name_to_id_.find(msg.name[i]);
-      if (it == joint_name_to_id_.end()) {
-        continue;
-      }
-
-      const pinocchio::JointIndex joint_id = it->second;
-      const pinocchio::Index q_index = model_->joints[joint_id].idx_q();
-      q[q_index] = msg.position[i];
-    }
-
-    return q;
-  }
-
-  Eigen::VectorXd solveInverseKinematics(const Eigen::VectorXd &q_seed) {
-    Eigen::VectorXd q = q_seed;
-
-    for (int iteration = 0; iteration < max_iterations_; ++iteration) {
-      pinocchio::forwardKinematics(*model_, *data_, q);
-      pinocchio::updateFramePlacements(*model_, *data_);
-
-      const Eigen::Vector3d current_position = data_->oMf[end_effector_frame_id_].translation();
-      const Eigen::Vector3d target(target_position_[0], target_position_[1], target_position_[2]);
-      const Eigen::Vector3d error = target - current_position;
-
-      if (error.norm() < tolerance_) {
-        break;
-      }
-
-      pinocchio::computeJointJacobians(*model_, *data_, q);
-      Eigen::MatrixXd jacobian = Eigen::MatrixXd::Zero(6, model_->nv);
-      pinocchio::getFrameJacobian(*model_, *data_, end_effector_frame_id_, pinocchio::LOCAL_WORLD_ALIGNED, jacobian);
-
-      const Eigen::MatrixXd position_jacobian = jacobian.topRows(3);
-      const Eigen::Matrix3d system_matrix = position_jacobian * position_jacobian.transpose() +
-                                            (damping_ * damping_) * Eigen::Matrix3d::Identity();
-      const Eigen::Vector3d correction = step_size_ * system_matrix.ldlt().solve(error);
-      const Eigen::VectorXd dq = position_jacobian.transpose() * correction;
-
-      q = pinocchio::integrate(*model_, q, dq);
-    }
-
-    return q;
-  }
-
-  void publishJointTarget(const joint_state_msg &reference_msg, const Eigen::VectorXd &q_target) {
-    joint_state_msg command_msg;
-    command_msg.header.stamp = now();
-    command_msg.name = reference_msg.name;
-    command_msg.position.resize(reference_msg.name.size());
-    command_msg.velocity.clear();
-    command_msg.effort.clear();
-
-    for (std::size_t i = 0; i < reference_msg.name.size(); ++i) {
-      const auto it = joint_name_to_id_.find(reference_msg.name[i]);
-      if (it == joint_name_to_id_.end()) {
-        command_msg.position[i] = reference_msg.position[i];
-        continue;
-      }
-
-      const pinocchio::JointIndex joint_id = it->second;
-      const pinocchio::Index q_index = model_->joints[joint_id].idx_q();
-      command_msg.position[i] = q_target[q_index];
-    }
-
-    ik_pub_->publish(command_msg);
-  }
-
-  void inverseKinematics(const joint_state_msg::SharedPtr msg) {
-    if (msg->name.empty() || msg->position.empty()) {
+  void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg) {
+    if (msg->name.empty() || msg->position.empty())
       return;
+
+    // --- 核心修改：根据映射填充 q ---
+    // 使用 neutral 位置初始化，防止某些关节缺失
+    Eigen::VectorXd q = neutral(*model_);
+
+    for (size_t i = 0; i < msg->name.size(); ++i) {
+      auto it = joint_name_to_id_.find(msg->name[i]);
+      if (it != joint_name_to_id_.end()) {
+        JointIndex joint_id = it->second;
+        // 获取该关节在 q 中的起始索引 (对于单自由度关节，nq 通常是 1)
+        int idx = model_->joints[joint_id].idx_q();
+        q[idx] = msg->position[i];
+      }
     }
 
-    const Eigen::VectorXd q_seed = jointStateToConfiguration(*msg);
-    const Eigen::VectorXd q_target = solveInverseKinematics(q_seed);
-    publishJointTarget(*msg, q_target);
+    // --- 核心 IK 循环 ---
+    const double damping = 1e-4;
+    const int max_iter = 15;
+    const double step_size = 0.5;
 
-    pinocchio::forwardKinematics(*model_, *data_, q_target);
-    pinocchio::updateFramePlacements(*model_, *data_);
-    const Eigen::Vector3d actual = data_->oMf[end_effector_frame_id_].translation();
-    const Eigen::Vector3d target(target_position_[0], target_position_[1], target_position_[2]);
-    const double error_norm = (target - actual).norm();
+    for (int i = 0; i < max_iter; i++) {
+      forwardKinematics(*model_, *data_, q);
+      updateFramePlacements(*model_, *data_);
+      computeJointJacobians(*model_, *data_, q);
 
-    RCLCPP_INFO_THROTTLE(
-      get_logger(), *get_clock(), 1000,
-      "IK solved. target=[%.4f, %.4f, %.4f] actual=[%.4f, %.4f, %.4f] error=%.6f",
-      target[0], target[1], target[2], actual[0], actual[1], actual[2], error_norm);
+      const SE3 &current_M = data_->oMf[ee_id_];
+
+      // 这里建议切换到 LOCAL_WORLD_ALIGNED 以获得更好的稳定性
+      const Motion err_motion = log6(current_M.inverse() * target_M_);
+      Eigen::Matrix<double, 6, 1> err = err_motion.toVector();
+
+      if (err.norm() < 1e-4)
+        break;
+
+      Data::Matrix6x J(6, model_->nv);
+      getFrameJacobian(*model_, *data_, ee_id_, LOCAL, J);
+
+      Data::Matrix6x JJt = J * J.transpose();
+      JJt.diagonal().array() += damping;
+      Eigen::VectorXd dq = J.transpose() * JJt.ldlt().solve(err);
+
+      q = integrate(*model_, q, dq * step_size);
+    }
+
+    // --- 发布指令：写回对应位置 ---
+    auto out_msg = *msg;
+    for (size_t i = 0; i < out_msg.name.size(); ++i) {
+      auto it = joint_name_to_id_.find(out_msg.name[i]);
+      if (it != joint_name_to_id_.end()) {
+        out_msg.position[i] = q[model_->joints[it->second].idx_q()];
+      }
+    }
+    pub_->publish(out_msg);
   }
 
-  std::shared_ptr<pinocchio::Model> model_;
-  std::unique_ptr<pinocchio::Data> data_;
-  std::unordered_map<std::string, pinocchio::JointIndex> joint_name_to_id_;
-  rclcpp::Subscription<joint_state_msg>::SharedPtr joint_sub_;
-  rclcpp::Publisher<joint_state_msg>::SharedPtr ik_pub_;
-
-  std::vector<double> target_position_;
-  std::string end_effector_frame_;
-  std::string joint_states_topic_;
-  std::string ik_command_topic_;
-  pinocchio::FrameIndex end_effector_frame_id_{};
-  double damping_{1e-3};
-  double step_size_{0.5};
-  double tolerance_{1e-4};
-  int max_iterations_{20};
+  std::shared_ptr<Model> model_;
+  std::unique_ptr<Data> data_;
+  std::unordered_map<std::string, JointIndex> joint_name_to_id_; // 映射表
+  FrameIndex ee_id_;
+  SE3 target_M_;
+  std::string ee_frame_name_;
+  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr sub_;
+  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pub_;
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
-  auto node = std::make_shared<ReceiveNode>();
-  rclcpp::spin(node);
+  rclcpp::spin(std::make_shared<SimpleIK>());
   rclcpp::shutdown();
   return 0;
 }
