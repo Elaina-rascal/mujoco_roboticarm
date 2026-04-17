@@ -43,10 +43,6 @@ class SimpleMujocoArm(Node):
         self.target_positions = np.array(self.data.qpos[:len(self.joint_names)], dtype=float)
         self.has_target = False
 
-        # 简单位置跟踪参数
-        self.kp = 5.0
-        self.kd = 1.0
-        
         # 4. 启动可视化窗口 (被动模式，不会阻塞主线程)
         self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
         
@@ -76,13 +72,8 @@ class SimpleMujocoArm(Node):
 
     def _simulation_step(self):
         if self.has_target:
-            current_qpos = self.data.qpos[:len(self.joint_names)]
-            current_qvel = self.data.qvel[:len(self.joint_names)]
-
             for i in range(min(len(self.data.ctrl), len(self.joint_names))):
-                position_error = self.target_positions[i] - current_qpos[i]
-                velocity_error = current_qvel[i]
-                self.data.ctrl[i] = self.kp * position_error - self.kd * velocity_error
+                self.data.ctrl[i] = self.target_positions[i]
         # 仿真步进
         mujoco.mj_step(self.model, self.data) # type: ignore
         
