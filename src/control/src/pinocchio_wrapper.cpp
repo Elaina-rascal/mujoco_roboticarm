@@ -1,59 +1,53 @@
 #include "control/pinocchio_wrapper.hpp"
 
+#include <pinocchio/multibody/data.hpp>
+#include <pinocchio/multibody/model.hpp>
 #include <pinocchio/algorithm/frames.hpp>
 #include <pinocchio/algorithm/jacobian.hpp>
 #include <pinocchio/algorithm/joint-configuration.hpp>
 #include <pinocchio/algorithm/kinematics.hpp>
+#include <pinocchio/parsers/mjcf.hpp>
+#include <pinocchio/spatial/motion.hpp>
+#include <pinocchio/spatial/se3.hpp>
 
-#include <Eigen/Dense>
+namespace pinwrapper {
 
-// template class pinocchio::ModelTpl<double>;
-template class pinocchio::DataTpl<double>;
+void BuildModelFromMjcf(const std::string &model_path, pinocchio::Model &model) {
+    pinocchio::mjcf::buildModel(model_path, model);
+}
 
-namespace pinocchio {
+Eigen::VectorXd Neutral(const pinocchio::Model &model) {
+    return pinocchio::neutral(model);
+}
 
-// 2. 算法函数声明
-// 注意：ConfigVectorType 必须与你业务代码传入的 Eigen 类型严格匹配（通常是
-// VectorXd）
+void ForwardKinematics(const pinocchio::Model &model, pinocchio::Data &data,
+                                             const Eigen::VectorXd &q) {
+    pinocchio::forwardKinematics(model, data, q);
+}
 
-// forwardKinematics
-template void
-forwardKinematics<double, 0, JointCollectionDefaultTpl, Eigen::VectorXd>(
-    const ModelTpl<double, 0, JointCollectionDefaultTpl> &,
-    DataTpl<double, 0, JointCollectionDefaultTpl> &,
-    const Eigen::MatrixBase<Eigen::VectorXd> &);
+void UpdateFramePlacements(const pinocchio::Model &model, pinocchio::Data &data) {
+    pinocchio::updateFramePlacements(model, data);
+}
 
-// updateFramePlacements
-template void
-updateFramePlacements<double, 0, JointCollectionDefaultTpl>(
-    const ModelTpl<double, 0, JointCollectionDefaultTpl> &,
-    DataTpl<double, 0, JointCollectionDefaultTpl> &);
+void ComputeJointJacobians(const pinocchio::Model &model, pinocchio::Data &data,
+                                                     const Eigen::VectorXd &q) {
+    pinocchio::computeJointJacobians(model, data, q);
+}
 
-// computeJointJacobians
-template const typename DataTpl<double, 0,JointCollectionDefaultTpl>::Matrix6x &
-computeJointJacobians<double, 0, JointCollectionDefaultTpl, Eigen::VectorXd>(
-    const ModelTpl<double, 0, JointCollectionDefaultTpl> &,
-    DataTpl<double, 0, JointCollectionDefaultTpl> &,
-    const Eigen::MatrixBase<Eigen::VectorXd> &);
+void GetFrameJacobian(const pinocchio::Model &model, pinocchio::Data &data,
+                                            pinocchio::FrameIndex frame_id,
+                                            pinocchio::ReferenceFrame reference_frame,
+                                            Eigen::Matrix<double, 6, Eigen::Dynamic> &jacobian) {
+    pinocchio::getFrameJacobian(model, data, frame_id, reference_frame, jacobian);
+}
 
-// getFrameJacobian
-// 注意：业务代码中如果传入的是子矩阵，通常需要实例化 Eigen::Ref 版本
-template void getFrameJacobian<double, 0, JointCollectionDefaultTpl,
-                                      Eigen::Ref<Eigen::Matrix<double, 6, -1>>>(
-    const ModelTpl<double, 0, JointCollectionDefaultTpl> &,
-    DataTpl<double, 0, JointCollectionDefaultTpl> &, const FrameIndex,
-    const ReferenceFrame,
-    const Eigen::MatrixBase<Eigen::Ref<Eigen::Matrix<double, 6, -1>>> &);
+pinocchio::Motion Log6(const pinocchio::SE3 &pose_error) {
+    return pinocchio::log6(pose_error);
+}
 
-// log6
-template MotionTpl<double, 0> log6<double, 0>(const SE3Tpl<double, 0> &);
+Eigen::VectorXd Integrate(const pinocchio::Model &model, const Eigen::VectorXd &q,
+                                                    const Eigen::VectorXd &v) {
+    return pinocchio::integrate(model, q, v);
+}
 
-// integrate
-template Eigen::Matrix<double, -1, 1>
-integrate<double, 0, JointCollectionDefaultTpl, Eigen::VectorXd,
-          Eigen::VectorXd>(
-    const ModelTpl<double, 0, JointCollectionDefaultTpl> &,
-    const Eigen::MatrixBase<Eigen::VectorXd> &,
-    const Eigen::MatrixBase<Eigen::VectorXd> &);
-
-} // namespace pinocchio
+} // namespace pinwrapper

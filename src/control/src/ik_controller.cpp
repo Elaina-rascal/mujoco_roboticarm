@@ -1,10 +1,5 @@
 #include "control/ik_controller.hpp"
-
-#include <pinocchio/algorithm/frames.hpp>
-#include <pinocchio/algorithm/jacobian.hpp>
-#include <pinocchio/algorithm/joint-configuration.hpp>
-#include <pinocchio/algorithm/kinematics.hpp>
-#include <pinocchio/parsers/mjcf.hpp>
+#include "control/pinocchio_wrapper.hpp"
 
 #include <algorithm>
 #include <stdexcept>
@@ -17,7 +12,7 @@ IKController::IKController(const std::string &model_path,
     : model_(), data_(model_), ee_id_(0), joint_name_to_id_(), target_pose_(target_pose) {
   // 从 MJCF 文件加载机器人模型，并初始化与模型绑定的运行时缓存 data_。
   // data_ 中会保存正运动学结果、雅可比等中间量，后续每次迭代都复用它。
-  pinocchio::mjcf::buildModel(model_path, model_);
+  pinwrapper::BuildModelFromMjcf(model_path, model_);
   data_ = pinocchio::Data(model_);
 
   // 建立 “关节名 -> JointIndex” 的查找表，避免每次回调都线性搜索。
@@ -38,7 +33,7 @@ Eigen::VectorXd IKController::buildConfiguration(
     const std::vector<std::string> &joint_names,
     const std::vector<double> &joint_positions) const {
   // 先用 neutral 配置兜底，避免 JointState 缺少部分关节时出现未初始化数据。
-  Eigen::VectorXd q = pinocchio::neutral(model_);
+  Eigen::VectorXd q = pinwrapper::Neutral(model_);
   const size_t count = std::min(joint_names.size(), joint_positions.size());
 
   // 按名字把 ROS JointState 的位置写入 Pinocchio 配置向量 q。
@@ -95,15 +90,15 @@ std::vector<double> IKController::solve(const std::vector<std::string> &joint_na
 
   for (int i = 0; i < kMaxIterations; ++i) {
     // 1) 在当前 q 下更新运动学、frame 位姿和关节雅可比缓存。
-    pinocchio::forwardKinematics(model_, data_, q);
-    pinocchio::updateFramePlacements(model_, data_);
-    pinocchio::computeJointJacobians(model_, data_, q);
+    pinwrapper::ForwardKinematics(model_, data_, q);
+    pinwrapper::UpdateFramePlacements(model_, data_);
+    pinwrapper::ComputeJointJacobians(model_, data_, q);
 
     // 2) 计算末端位姿误差（当前位姿 -> 目标位姿），并映射到 se(3) 6 维向量。
     //    error 前 3 维通常对应角速度误差，后 3 维对应线速度误差。
     const pinocchio::SE3 current_pose = data_.oMf[ee_id_];
-    const pinocchio::Motion error_motion =
-        pinocchio::log6(current_pose.inverse() * target_pose_);
+    const pinocchio::Motion error_motion = pinwrapper::Log6(
+      current_pose.inverse() * target_pose_);
     const Eigen::Matrix<double, 6, 1> error = error_motion.toVector();
 
     // 3) 达到阈值则提前收敛。
@@ -113,7 +108,8 @@ std::vector<double> IKController::solve(const std::vector<std::string> &joint_na
 
     // 4) 取末端 frame 在 LOCAL 坐标系下的 6 x nv 雅可比矩阵。
     Eigen::Matrix<double, 6, Eigen::Dynamic> jacobian(6, model_.nv);
-    pinocchio::getFrameJacobian(model_, data_, ee_id_, pinocchio::LOCAL, jacobian);
+    pinwrapper::GetFrameJacobian(model_, data_, ee_id_, pinocchio::LOCAL,
+                   jacobian);
 
     // 5) 构造 DLS 正规方程的稳定项 (J J^T + λI)。
     Eigen::Matrix<double, 6, 6> jj_t = jacobian * jacobian.transpose();
@@ -122,7 +118,7 @@ std::vector<double> IKController::solve(const std::vector<std::string> &joint_na
     // 6) DLS 更新：dq = J^T (J J^T + λI)^-1 e。
     //    最后通过 integrate 在流形上更新 q，避免直接相加带来的表示错误。
     const Eigen::VectorXd dq = jacobian.transpose() * jj_t.ldlt().solve(error);
-    q = pinocchio::integrate(model_, q, dq * kStepSize);
+    q = pinwrapper::Integrate(model_, q, dq * kStepSize);
   }
 
   // 将最终 q 按输入关节顺序导出，作为 ROS 输出消息位置数组。
