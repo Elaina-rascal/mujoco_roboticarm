@@ -4,8 +4,9 @@ def main():
     print(pin.__version__)
     print(pin.__file__)
     xml = str(Path(__file__).resolve().parent.parent/'mujoco_arm_publisher' / 'models' / 'universal_robots_ur5e' / 'ur5e.xml')
-    model = pin.buildModelsFromMJCF(xml) 
+    model = pin.buildModelsFromMJCF(xml) #type: ignore
     # pin.forwardKinematics(model, data)
+    
     test=pin.SE3.Identity()
     print(test)
     # print(data)

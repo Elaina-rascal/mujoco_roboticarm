@@ -12,7 +12,14 @@ find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(pinocchio REQUIRED) # 新增 Pinocchio 依赖
 # 编译可执行文件
-add_executable(invkinematic src/invkinematic.cpp)
+add_executable(
+  invkinematic
+  src/invkinematic.cpp
+  src/ik_node.cpp
+  src/ik_controller.cpp
+  src/pinocchio_wrapper.cpp
+)
+target_include_directories(invkinematic PRIVATE include)
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     target_compile_options(invkinematic PRIVATE -ftime-trace)
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
