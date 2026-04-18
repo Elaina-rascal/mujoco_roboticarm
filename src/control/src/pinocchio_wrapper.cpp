@@ -7,33 +7,53 @@
 
 #include <Eigen/Dense>
 
-template class pinocchio::ModelTpl<double>;
+// template class pinocchio::ModelTpl<double>;
 template class pinocchio::DataTpl<double>;
 
 namespace pinocchio {
 
-void instantiate_used_algorithms_for_control() {
-	// 该函数故意不在业务路径中调用。
-	// 只要本编译单元参与编译，下面这些调用就会把 IKController 用到的
-	// Pinocchio 算法模板集中实例化到这里，避免散落在多个 .cpp 中重复生成。
-	Model model;
-	Data data(model);
+// 2. 算法函数声明
+// 注意：ConfigVectorType 必须与你业务代码传入的 Eigen 类型严格匹配（通常是
+// VectorXd）
 
-	const Eigen::VectorXd q = neutral(model);
-	forwardKinematics(model, data, q);
-	updateFramePlacements(model, data);
-	computeJointJacobians(model, data, q);
+// forwardKinematics
+template void
+forwardKinematics<double, 0, JointCollectionDefaultTpl, Eigen::VectorXd>(
+    const ModelTpl<double, 0, JointCollectionDefaultTpl> &,
+    DataTpl<double, 0, JointCollectionDefaultTpl> &,
+    const Eigen::MatrixBase<Eigen::VectorXd> &);
 
-	const SE3 identity_pose = SE3::Identity();
-	const Motion motion_err = log6(identity_pose);
+// updateFramePlacements
+template void
+updateFramePlacements<double, 0, JointCollectionDefaultTpl>(
+    const ModelTpl<double, 0, JointCollectionDefaultTpl> &,
+    DataTpl<double, 0, JointCollectionDefaultTpl> &);
 
-	Eigen::Matrix<double, 6, Eigen::Dynamic> jacobian(6, model.nv);
-	getFrameJacobian(model, data, FrameIndex(0), LOCAL, jacobian);
+// computeJointJacobians
+template const typename DataTpl<double, 0,JointCollectionDefaultTpl>::Matrix6x &
+computeJointJacobians<double, 0, JointCollectionDefaultTpl, Eigen::VectorXd>(
+    const ModelTpl<double, 0, JointCollectionDefaultTpl> &,
+    DataTpl<double, 0, JointCollectionDefaultTpl> &,
+    const Eigen::MatrixBase<Eigen::VectorXd> &);
 
-	const Eigen::VectorXd q_next = integrate(model, q, q * 0.0);
+// getFrameJacobian
+// 注意：业务代码中如果传入的是子矩阵，通常需要实例化 Eigen::Ref 版本
+template void getFrameJacobian<double, 0, JointCollectionDefaultTpl,
+                                      Eigen::Ref<Eigen::Matrix<double, 6, -1>>>(
+    const ModelTpl<double, 0, JointCollectionDefaultTpl> &,
+    DataTpl<double, 0, JointCollectionDefaultTpl> &, const FrameIndex,
+    const ReferenceFrame,
+    const Eigen::MatrixBase<Eigen::Ref<Eigen::Matrix<double, 6, -1>>> &);
 
-	(void)motion_err;
-	(void)q_next;
-}
+// log6
+template MotionTpl<double, 0> log6<double, 0>(const SE3Tpl<double, 0> &);
+
+// integrate
+template Eigen::Matrix<double, -1, 1>
+integrate<double, 0, JointCollectionDefaultTpl, Eigen::VectorXd,
+          Eigen::VectorXd>(
+    const ModelTpl<double, 0, JointCollectionDefaultTpl> &,
+    const Eigen::MatrixBase<Eigen::VectorXd> &,
+    const Eigen::MatrixBase<Eigen::VectorXd> &);
 
 } // namespace pinocchio
