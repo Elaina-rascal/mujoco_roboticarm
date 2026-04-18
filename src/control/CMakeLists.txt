@@ -20,15 +20,15 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     # 或者检查是否有字符编码问题。这里我们先换成兼容性最好的 report
     # target_compile_options(invkinematic PRIVATE -ftime-report)
 endif()
-target_precompile_headers(invkinematic PRIVATE 
-    <Eigen/Dense>
-    <rclcpp/rclcpp.hpp>
-    <pinocchio/algorithm/frames.hpp>
-    <pinocchio/algorithm/jacobian.hpp>
-    <pinocchio/algorithm/kinematics.hpp>
-    <pinocchio/algorithm/joint-configuration.hpp>
-    <pinocchio/parsers/mjcf.hpp>
-)
+# target_precompile_headers(invkinematic PRIVATE 
+#     <Eigen/Dense>
+#     <rclcpp/rclcpp.hpp>
+#     <pinocchio/algorithm/frames.hpp>
+#     <pinocchio/algorithm/jacobian.hpp>
+#     <pinocchio/algorithm/kinematics.hpp>
+#     <pinocchio/algorithm/joint-configuration.hpp>
+#     <pinocchio/parsers/mjcf.hpp>
+# )
 target_link_libraries(invkinematic 
   rclcpp::rclcpp
   pinocchio::pinocchio # 链接 Pinocchio 库
