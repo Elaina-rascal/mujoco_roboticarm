@@ -85,6 +85,10 @@ class PinocchioIKSolver:
 
         return q
 
+    def set_target_point(self, x: float, y: float, z: float) -> None:
+        """设置末端目标点（保持单位旋转，仅更新平移）。"""
+        self.target_M = pin.SE3(np.eye(3), np.array([x, y, z], dtype=float))
+
     def q_to_joint_positions(
         self,
         q: np.ndarray,
