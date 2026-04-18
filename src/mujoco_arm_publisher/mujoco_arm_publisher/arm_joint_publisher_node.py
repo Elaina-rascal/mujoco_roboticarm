@@ -6,6 +6,8 @@ import mujoco.viewer
 import numpy as np
 from pathlib import Path
 
+from .mujoco_tf_publisher import MujocoTfPublisher
+
 class SimpleMujocoArm(Node):
     def __init__(self):
         super().__init__('simple_mujoco_arm')
@@ -19,6 +21,7 @@ class SimpleMujocoArm(Node):
         
         # 2. ROS2 发布者 (发布关节状态)
         self.publisher = self.create_publisher(JointState, '/joint_states', 10)
+        self.tf_publisher = MujocoTfPublisher(self)
 
         # 2.1 ROS2 订阅者 (接收 IK 目标关节角)
         self.target_subscriber = self.create_subscription(
@@ -90,6 +93,9 @@ class SimpleMujocoArm(Node):
         msg.position = self.data.qpos[:len(self.joint_names)].tolist()
         msg.velocity = self.data.qvel[:len(self.joint_names)].tolist()
         self.publisher.publish(msg)
+
+        # 发布 MuJoCo 中各 body 对应的 TF 坐标系
+        self.tf_publisher.publish(self.model, self.data, msg.header.stamp)
 
 def main(args=None):
     rclpy.init(args=args)
