@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
+from std_msgs.msg import Float64MultiArray
 import mujoco
 import mujoco.viewer
 import numpy as np
@@ -22,9 +23,9 @@ class TorqueMujocoArm(Node):
 
         self.publisher = self.create_publisher(JointState, '/joint_states', 10)
         self.target_subscriber = self.create_subscription(
-            JointState,
-            '/ik_joint_target',
-            self._on_target_joint_state,
+            Float64MultiArray,
+            '/dynamics_torque_cmd',
+            self._on_torque_cmd,
             10,
         )
 
@@ -48,24 +49,18 @@ class TorqueMujocoArm(Node):
         self.timer = self.create_timer(self.dt, self._simulation_step)
         self.get_logger().info('MuJoCo UR5e 力矩控制仿真已启动')
 
-    def _on_target_joint_state(self, msg: JointState):
-        if not msg.name or len(msg.effort) < len(msg.name):
+    def _on_torque_cmd(self, msg: Float64MultiArray):
+        if not msg.data:
             return
 
-        updated = False
-        for index, joint_name in enumerate(msg.name):
-            if joint_name not in self.joint_name_to_act:
-                continue
+        count = min(len(msg.data), len(self.target_torques))
+        if count <= 0:
+            return
 
-            act_id = self.joint_name_to_act[joint_name]
-            if act_id >= len(self.target_torques):
-                continue
+        for i in range(count):
+            self.target_torques[i] = float(msg.data[i])
 
-            self.target_torques[act_id] = float(msg.effort[index])
-            updated = True
-
-        if updated:
-            self.has_target = True
+        self.has_target = True
 
     def _simulation_step(self):
         if self.has_target:
@@ -75,7 +70,12 @@ class TorqueMujocoArm(Node):
                 self.data.ctrl[i] = tau
 
         mujoco.mj_step(self.model, self.data)  # type: ignore
-
+        msg = JointState()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.name = self.joint_names
+        msg.position = self.data.qpos[:len(self.joint_names)].tolist()
+        msg.velocity = self.data.qvel[:len(self.joint_names)].tolist()
+        self.publisher.publish(msg)
         if self.viewer.is_running():
             self.viewer.sync()
         else:
