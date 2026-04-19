@@ -19,8 +19,8 @@ class DummyForce:
         self.kp = float(kp)
         self.kd = float(kd)
         #末端位置到力的pd控制
-        self.end_Kp = np.diag([200, 200, 200, 40, 40, 40])
-        self.end_dgain=0.1 #阻尼增益，防止末端振荡
+        self.end_Kp = np.diag([200, 200, 200, 20, 20, 20])
+        self.end_dgain=0.4 #阻尼增益，防止末端振荡
     def compute_torque(
         self,
         joint_positions: List[float],
@@ -46,12 +46,14 @@ class DummyForce:
         pin.computeJointJacobians(self.model, self.data, q)
         # 计算当前末端位姿
         current_M = self.data.oMf[self.ee_id]  #type: ignore
-
+        v_vector=pin.getFrameVelocity(self.model, self.data, self.ee_id, pin.ReferenceFrame.LOCAL).vector
         # 计算误差运动 (SE3 空间中的 log 映射)
+        assert isinstance(v_vector, np.ndarray), "getFrameVelocity 返回值类型不匹配"
         err_motion = pin.log6(current_M.inverse() * self.target_M)
         err = err_motion.vector
         # 末端力计算（简单的 PD 控制）
-        end_effort = self.end_Kp @ err
+        
+        end_effort = self.end_Kp @ err+self.end_dgain*self.end_Kp @ (-v_vector)
         # 雅可比转化为关节力矩
         J  = pin.getFrameJacobian(
                 self.model,

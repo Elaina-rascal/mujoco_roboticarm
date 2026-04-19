@@ -24,7 +24,7 @@ class DynamicsIKNode(Node):
         try:
             # self.solver = PinocchioIKSolver(model_path=model_path)
             self.controller = DummyForce(
-                model=self.model,kp=0.0,kd=10.0
+                model=self.model,kp=0.0,kd=0.0
             )
         except Exception as exc:  # noqa: BLE001
             self.get_logger().error(f"无法初始化 Pinocchio 求解器: {exc}")
