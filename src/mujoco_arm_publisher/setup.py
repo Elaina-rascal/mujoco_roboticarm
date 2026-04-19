@@ -23,6 +23,7 @@ setup(
     entry_points={
         'console_scripts': [
             'arm_joint_publisher = mujoco_arm_publisher.arm_joint_publisher_node:main',
+            'arm_joint_torque_publisher = mujoco_arm_publisher.torque_node:main',
         ],
     },
 )

@@ -19,3 +19,5 @@ rosbag2_*/
 .claude/settings.local.json
 *.svg
 result.json
+core.*
+MUJOCO_LOG.TXT
