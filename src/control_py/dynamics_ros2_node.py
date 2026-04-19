@@ -6,10 +6,10 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64MultiArray
-
+import pinocchio as pin
 from dynamics_controller import PinocchioDynamicsController
 from pinocchio_ik import PinocchioIKSolver
-
+from Dummyforce import DummyForce
 
 class DynamicsIKNode(Node):
     """ROS2 节点层：IK + 动力学控制，输出关节力矩。"""
@@ -20,13 +20,11 @@ class DynamicsIKNode(Node):
         # 模型路径约定为当前目录下的 model/ur5e.xml
         current_dir = Path(__file__).resolve().parent
         model_path = current_dir / "model" / "ur5e.xml"
-
+        self.model = pin.buildModelFromMJCF(str(model_path))
         try:
-            self.solver = PinocchioIKSolver(model_path=model_path)
-            self.controller = PinocchioDynamicsController(
-                model=self.solver.model,
-                kp=80.0,
-                kd=20.0,
+            # self.solver = PinocchioIKSolver(model_path=model_path)
+            self.controller = DummyForce(
+                model=self.model,kp=0.0,kd=10.0
             )
         except Exception as exc:  # noqa: BLE001
             self.get_logger().error(f"无法初始化 Pinocchio 求解器: {exc}")
@@ -42,7 +40,7 @@ class DynamicsIKNode(Node):
 
         # 圆轨迹目标参数：末端目标点将围绕 center 在 x-y 平面画圆。
         self.circle_center = np.array([0.35, 0.15, 0.5], dtype=float)
-        self.circle_radius = 0.1
+        self.circle_radius = 0.0
         self.circle_omega = 3  # rad/s
         self.start_time_ns = self.get_clock().now().nanoseconds
 
@@ -57,7 +55,7 @@ class DynamicsIKNode(Node):
         target_y = self.circle_center[1] + self.circle_radius * math.sin(self.circle_omega * t)
         target_z = self.circle_center[2]
 
-        self.solver.set_target_point(float(target_x), float(target_y), float(target_z))
+        self.controller.set_target_point(float(target_x), float(target_y), float(target_z))
 
     def joint_state_callback(self, msg: JointState) -> None:
         if not msg.name or not msg.position:
@@ -65,7 +63,6 @@ class DynamicsIKNode(Node):
 
         # 每次回调都刷新末端轨迹目标，再做 IK 与动力学控制
         self._update_circular_target()
-        q_ref = self.solver.solve(list(msg.name), list(msg.position))
 
         if msg.velocity and len(msg.velocity) >= len(msg.name):
             cur_vel = list(msg.velocity[:len(msg.name)])
@@ -75,7 +72,6 @@ class DynamicsIKNode(Node):
         effort_cmd = self.controller.compute_torque(
             joint_positions=list(msg.position),
             joint_velocities=cur_vel,
-            q_ref=q_ref,
         )
 
         out_msg = Float64MultiArray()
