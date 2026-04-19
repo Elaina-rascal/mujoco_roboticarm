@@ -25,8 +25,8 @@ class DynamicsIKNode(Node):
             self.solver = PinocchioIKSolver(model_path=model_path)
             self.controller = PinocchioDynamicsController(
                 model=self.solver.model,
-                kp=10.0,
-                kd=1.0,
+                kp=80.0,
+                kd=20.0,
             )
         except Exception as exc:  # noqa: BLE001
             self.get_logger().error(f"无法初始化 Pinocchio 求解器: {exc}")
@@ -42,8 +42,8 @@ class DynamicsIKNode(Node):
 
         # 圆轨迹目标参数：末端目标点将围绕 center 在 x-y 平面画圆。
         self.circle_center = np.array([0.35, 0.15, 0.5], dtype=float)
-        self.circle_radius = 0.0
-        self.circle_omega = 6  # rad/s
+        self.circle_radius = 0.1
+        self.circle_omega = 3  # rad/s
         self.start_time_ns = self.get_clock().now().nanoseconds
 
         self.get_logger().info("动力学控制节点初始化成功")
