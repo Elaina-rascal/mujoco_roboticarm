@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import List
 
 import numpy as np
 import pinocchio as pin
@@ -14,13 +14,22 @@ class PinocchioDynamicsController:
     def __init__(
         self,
         model: pin.Model,
-        joint_name_to_id: Dict[str, int],
         kp: float = 80.0,
         kd: float = 12.0,
     ) -> None:
         self.model = model
         self.data = self.model.createData()
-        self.joint_name_to_id = joint_name_to_id
+
+        # 直接按 Pinocchio 模型中的关节顺序建立索引表，不再做 name/id 映射。
+        self.q_indices: List[int] = []
+        self.v_indices: List[int] = []
+        joints = self.model.joints if self.model.joints is not None else []
+        for joint_id in range(1, len(joints)):
+            joint = joints[joint_id]
+            if joint is None:
+                continue
+            self.q_indices.append(int(joint.idx_q))
+            self.v_indices.append(int(joint.idx_v))
 
         # 统一增益（简单稳定，后续可改成各关节独立增益）
         self.kp = float(kp)
@@ -28,24 +37,21 @@ class PinocchioDynamicsController:
 
     def compute_torque(
         self,
-        joint_names: List[str],
         joint_positions: List[float],
         joint_velocities: List[float],
         q_ref: np.ndarray,
     ) -> List[float]:
-        """根据当前状态与参考位姿计算关节力矩，并按 JointState 顺序返回。"""
+        """根据当前状态与参考位姿计算关节力矩，并按输入顺序返回。"""
         q = pin.neutral(self.model)
         qd = np.zeros(self.model.nv) #type: ignore
         qd_ref = np.zeros(self.model.nv) #type: ignore
         qdd_ref = np.zeros(self.model.nv) #type: ignore
 
-        # 把 ROS JointState 映射到 Pinocchio 配置向量
-        for i, name in enumerate(joint_names):
-            if name not in self.joint_name_to_id:
-                continue
-            joint_id = self.joint_name_to_id[name]
-            idx_q = self.model.joints[joint_id].idx_q  # type: ignore
-            idx_v = self.model.joints[joint_id].idx_v  # type: ignore
+        # 直接按关节顺序填充状态向量。
+        count = min(len(joint_positions), len(self.q_indices), len(joint_velocities))
+        for i in range(count):
+            idx_q = self.q_indices[i]
+            idx_v = self.v_indices[i]
             q[idx_q] = float(joint_positions[i])
             qd[idx_v] = float(joint_velocities[i])
 
@@ -54,24 +60,17 @@ class PinocchioDynamicsController:
 
         # 反馈项：在速度空间 idx_v 计算，保证与力矩维度一致
         tau = np.array(tau_ff, dtype=float)
-        for i, name in enumerate(joint_names):
-            if name not in self.joint_name_to_id:
-                continue
-            joint_id = self.joint_name_to_id[name]
-            idx_q = self.model.joints[joint_id].idx_q  # type: ignore
-            idx_v = self.model.joints[joint_id].idx_v  # type: ignore
+        count = min(len(q_ref), len(self.q_indices))
+        for i in range(count):
+            idx_q = self.q_indices[i]
+            idx_v = self.v_indices[i]
             pos_err = float(q_ref[idx_q] - q[idx_q])
             vel_err = float(qd_ref[idx_v] - qd[idx_v])
             tau[idx_v] += self.kp * pos_err + self.kd * vel_err
 
-        # 按输入关节名顺序回写到 effort
+        # 按输入顺序回写到 effort。
         out_effort: List[float] = []
-        for name in joint_names:
-            if name in self.joint_name_to_id:
-                joint_id = self.joint_name_to_id[name]
-                idx_v = self.model.joints[joint_id].idx_v  # type: ignore
-                out_effort.append(float(tau[idx_v]))
-            else:
-                out_effort.append(0.0)
+        for i in range(min(len(self.v_indices), len(joint_positions))):
+            out_effort.append(float(tau[self.v_indices[i]]))
 
         return out_effort

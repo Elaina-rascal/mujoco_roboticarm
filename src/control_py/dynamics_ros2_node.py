@@ -25,9 +25,8 @@ class DynamicsIKNode(Node):
             self.solver = PinocchioIKSolver(model_path=model_path)
             self.controller = PinocchioDynamicsController(
                 model=self.solver.model,
-                joint_name_to_id=self.solver.joint_name_to_id,
-                kp=80.0,
-                kd=12.0,
+                kp=10.0,
+                kd=1.0,
             )
         except Exception as exc:  # noqa: BLE001
             self.get_logger().error(f"无法初始化 Pinocchio 求解器: {exc}")
@@ -74,7 +73,6 @@ class DynamicsIKNode(Node):
             cur_vel = [0.0] * len(msg.name)
 
         effort_cmd = self.controller.compute_torque(
-            joint_names=list(msg.name),
             joint_positions=list(msg.position),
             joint_velocities=cur_vel,
             q_ref=q_ref,
