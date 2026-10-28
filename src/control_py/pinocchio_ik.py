@@ -33,16 +33,16 @@ class PinocchioIKSolver:
             self.joint_name_to_id[name] = i
 
     def solve(self, joint_names: List[str], joint_positions: List[float]) -> np.ndarray:
-        """根据输入 JointState 解 IK，返回解出的 q。"""
+        """根据输入关节数组解 IK，返回解出的 q。"""
         if not joint_names or not joint_positions:
             return pin.neutral(self.model)
 
         # 核心：根据映射填充当前配置 q
         q = pin.neutral(self.model)
 
-        # 将传入的 JointState 位置映射到 Pinocchio 的 q 向量中
+        # 将传入的关节位置映射到 Pinocchio 的 q 向量中
         for i, name in enumerate(joint_names):
-            if name in self.joint_name_to_id:
+            if i < len(joint_positions) and name in self.joint_name_to_id:
                 joint_id = self.joint_name_to_id[name]
                 idx_q = self.model.joints[joint_id].idx_q #type: ignore
                 q[idx_q] = joint_positions[i]
@@ -95,7 +95,7 @@ class PinocchioIKSolver:
         joint_names: List[str],
         fallback_positions: List[float],
     ) -> List[float]:
-        """把 Pinocchio 的 q 按 JointState 名字顺序回写为位置数组。"""
+        """把 Pinocchio 的 q 按关节名字顺序回写为位置数组。"""
         out = list(fallback_positions)
         if len(out) < len(joint_names):
             out.extend([0.0] * (len(joint_names) - len(out)))
@@ -104,7 +104,5 @@ class PinocchioIKSolver:
             if name in self.joint_name_to_id:
                 joint_id = self.joint_name_to_id[name]
                 out[i] = float(q[self.model.joints[joint_id].idx_q]) #type: ignore
-            else:
-                out[i] = fallback_positions[i]
 
         return out

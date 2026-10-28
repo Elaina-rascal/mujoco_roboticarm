@@ -2,7 +2,7 @@
     "name": "mujoco",
     "dockerComposeFile": "docker-compose.yml",
     "service": "gpu-service",
-    "workspaceFolder": "/home/Elaina/ros2_ws",
+    "workspaceFolder": "/home/Elaina/mujoco_roboticarm",
     "remoteUser": "Elaina",
     "shutdownAction": "stopCompose",
     "customizations": {

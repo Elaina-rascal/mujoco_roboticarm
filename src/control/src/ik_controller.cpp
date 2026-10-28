@@ -15,7 +15,7 @@ IKController::IKController(const std::string &model_path,
   pinwrapper::BuildModelFromMjcf(model_path, model_);
   data_ = pinocchio::Data(model_);
 
-  // 建立 “关节名 -> JointIndex” 的查找表，避免每次回调都线性搜索。
+  // 建立 “关节名 -> JointIndex” 的查找表，避免每次求解都线性搜索。
   // 从 1 开始是因为 0 通常是 universe 虚拟关节，不对应真实驱动关节。
   for (pinocchio::JointIndex i = 1; i < static_cast<pinocchio::JointIndex>(model_.njoints);
        ++i) {
@@ -32,11 +32,11 @@ IKController::IKController(const std::string &model_path,
 Eigen::VectorXd IKController::buildConfiguration(
     const std::vector<std::string> &joint_names,
     const std::vector<double> &joint_positions) const {
-  // 先用 neutral 配置兜底，避免 JointState 缺少部分关节时出现未初始化数据。
+  // 先用 neutral 配置兜底，避免关节数组缺少部分关节时出现未初始化数据。
   Eigen::VectorXd q = pinwrapper::Neutral(model_);
   const size_t count = std::min(joint_names.size(), joint_positions.size());
 
-  // 按名字把 ROS JointState 的位置写入 Pinocchio 配置向量 q。
+  // 按名字把关节数组的位置写入 Pinocchio 配置向量 q。
   // 若某个名字在模型中不存在，跳过即可，不影响其他关节。
   for (size_t i = 0; i < count; ++i) {
     const auto it = joint_name_to_id_.find(joint_names[i]);
@@ -61,7 +61,7 @@ std::vector<double> IKController::extractJointPositions(
     out.resize(joint_names.size(), 0.0);
   }
 
-  // 将 Pinocchio 解出的 q 按 JointState 的名字顺序回写到输出数组。
+  // 将 Pinocchio 解出的 q 按关节数组的名字顺序回写到输出数组。
   for (size_t i = 0; i < joint_names.size(); ++i) {
     const auto it = joint_name_to_id_.find(joint_names[i]);
     if (it == joint_name_to_id_.end()) {
@@ -85,7 +85,7 @@ std::vector<double> IKController::solve(const std::vector<std::string> &joint_na
   constexpr double kStepSize = 0.5;
   constexpr double kTolerance = 1e-4;
 
-  // 将 ROS 输入转换为 Pinocchio 配置向量。
+  // 将关节输入转换为 Pinocchio 配置向量。
   auto q = buildConfiguration(joint_names, joint_positions);
 
   for (int i = 0; i < kMaxIterations; ++i) {
@@ -121,7 +121,7 @@ std::vector<double> IKController::solve(const std::vector<std::string> &joint_na
     q = pinwrapper::Integrate(model_, q, dq * kStepSize);
   }
 
-  // 将最终 q 按输入关节顺序导出，作为 ROS 输出消息位置数组。
+  // 将最终 q 按输入关节顺序导出，作为输出位置数组。
   return extractJointPositions(q, joint_names, joint_positions);
 }
 

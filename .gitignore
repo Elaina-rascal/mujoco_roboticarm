@@ -5,7 +5,6 @@ build/
 laserdata(log)/
 log/
 install/
-!packages/ros-humble-ros1-bridge/**
 *.db3
 metadata.yaml
 .cache/
@@ -15,9 +14,9 @@ metadata.yaml
 *.mcap
 *.log
 *.lock
-rosbag2_*/
 .claude/settings.local.json
 *.svg
 result.json
 core.*
-MUJOCO_LOG.TXT
+MUJOCO_LOG.TXT__pycache__/
+.venv/

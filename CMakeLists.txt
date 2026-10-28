@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.15)
-project(workspace_top_level)
+project(mujoco_roboticarm LANGUAGES CXX)
 
-# 自动把 src 下的所有子文件夹当作 CMake 项目加入
-add_subdirectory(src/cmake_test)
-add_subdirectory(src/control)
+# Python 仿真直接运行脚本；C++ IK 示例按需编译。
+option(BUILD_CPP_IK "Build the standalone Pinocchio IK example" OFF)
+if(BUILD_CPP_IK)
+  add_subdirectory(src/control)
+endif()
