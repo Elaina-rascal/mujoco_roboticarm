@@ -12,7 +12,7 @@ import mujoco.viewer
 
 
 # 可选 position、torque、ik。
-MODE = "position"
+MODE = "ik"
 
 
 def main():
