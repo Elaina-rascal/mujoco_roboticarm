@@ -13,6 +13,7 @@ def main():
     # 两连杆平面机械臂：两杆均长 1 m，零位沿世界 +x 方向伸直。
     # 两个关节均绕 +z 轴转动，第二关节在零位位于 [1, 0, 0]。
     # 转动关节：w 是单位轴方向，v = -cross(w, 轴上一点)。
+    #绕世界原点转动
     vs1=world_to_twist([0,0,1],np.zeros(3),[0,0,0])
     vs2=world_to_twist([0,1,0],np.zeros(3),[0,0,0.2])
     vs3=world_to_twist([0,1,0],np.zeros(3),[1,0,0.2])
@@ -29,6 +30,7 @@ def main():
     print("最终位姿T:\n",T)
 
     #用自身旋量计算
+    #绕EE [-1.5,0.0,-0.2]点转动
     vb1=world_to_twist([0,0,1],np.zeros(3),[-1.5,0.0,-0.2])
     vb2=world_to_twist([0,1,0],np.zeros(3),[-1.5,0.0,0.0])
     vb3=world_to_twist([0,1,0],np.zeros(3),[-0.5,0,0])
