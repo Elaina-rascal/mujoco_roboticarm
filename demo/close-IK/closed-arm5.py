@@ -53,9 +53,14 @@ def main():
 
         J1_p = P1 @ J1
         J2_p = P2 @ J2
-        q[:2] += np.linalg.pinv(J1_p) @ v1_error[1::]
-        q[2:] += np.linalg.pinv(J2_p) @ v2_error[1::]
-
+        # q[:2] += np.linalg.pinv(J1_p) @ v1_error[1::]
+        # q[2:] += np.linalg.pinv(J2_p) @ v2_error[1::]
+        q[:2]+= np.linalg.pinv(J1_p) @ (p2-p1)
+        q[2:]+= np.linalg.pinv(J2_p) @ (p1-p2)
+        v1_error[0] = 0
+        v2_error[0] = 0
+        # q[:2]+= np.linalg.pinv(J1)@v1_error
+        # q[2:]+= np.linalg.pinv(J2)@v2_error
     T1 = SE2.Exp(S1 * q[0]) @ SE2.Exp(S2 * q[1]) @ M1
     T2 = SE2.Exp(S3 * q[2]) @ SE2.Exp(S4 * q[3]) @ M2
     #保留三位小数
