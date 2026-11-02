@@ -13,7 +13,7 @@ python3 demo/IK/4dof/run.py
 ```
 
 不使用 ROS 或 launch，没有 CLI 参数。网格已经保存在本目录，启动无需下载模型。
-`run.py` 中的 `TARGET_POSITION` 为世界系目标位置，单位 m。红点是末端，绿球是目标；也可以在窗口中选中绿球并按住 Ctrl + 鼠标右键拖动。
+`run.py` 中的 `TARGET_POSITION` 为世界系目标位置（m），`TARGET_PITCH` 为目标 ZYX Pitch（rad）。红点是末端，绿球是目标；也可以在窗口中选中绿球并按住 Ctrl + 鼠标右键拖动。
 
 ## 控制接口
 
@@ -28,8 +28,10 @@ compute(q, dq, ee_position, target_position, dt)
 - 返回四个目标关节角；返回 None 则保持上一条命令。
 - 控制周期 0.01 s，MuJoCo 物理步长 0.002 s。
 
-算法入口默认留空。`self.model`、`self.data`、`self.ee_id` 已加载，可直接使用 Pinocchio。
-四自由度不能任意指定完整六维末端位姿，建议先做末端位置 IK。
+`compute()` 保留单个迭代循环，计算四维误差 `[位置误差, Pitch 误差]`，使用 `J_task = A @ J` 求关节增量。
+`A` 的位置部分为 `[I, -skew(p)]`；Pinocchio WORLD 角速度对应的 Pitch 行为 `[-sin(yaw), cos(yaw), 0]`。
+每次迭代重新计算当前 `q_target` 的 FK 与雅可比，再用伪逆更新。Pitch 接近 ±90° 时欧拉角参数化奇异，应避开。
+这是简单的局部迭代，不保证任意初值或不可达目标收敛。
 
 ## q 与模型定义
 

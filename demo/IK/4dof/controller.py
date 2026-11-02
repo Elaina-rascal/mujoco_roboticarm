@@ -1,13 +1,13 @@
-"""四自由度位置控制练习：核心算法由你实现。"""
+"""四自由度位置 + Pitch 逆解。"""
 
 from pathlib import Path
 
-import pinocchio as pin 
+import pinocchio as pin
 import numpy as np
 
 
 class Controller:
-    def __init__(self):
+    def __init__(self, target_pitch=0.5):
         self.model = pin.buildModelFromMJCF(str(Path(__file__).with_name("arm.xml")))
         self.data = self.model.createData()
         if self.model.nq != 4 or self.model.nv != 4:
@@ -15,32 +15,37 @@ class Controller:
         if not self.model.existFrame("ee"):
             raise ValueError("模型中缺少末端 ee")
         self.ee_id = self.model.getFrameId("ee")
+        self.target_pitch = target_pitch  # 目标 ZYX Pitch，rad。
 
     def compute(self, q, dq, ee_position, target_position, dt):
-        """返回四个目标关节角（rad），或 None 保持上一条命令。
-
-        q / dq: (4,)，joint1 到 joint4，直接与 MuJoCo、Pinocchio 共用。
-        ee_position / target_position: (3,)，世界系位置，m。
-        dt: 控制周期，s。
-        """
-        # TODO：在这里实现自己的 IK / 控制算法。
+        """返回四个目标关节角，任务为世界系位置与 ZYX Pitch。"""
         error_threshold = 1e-3
-        T_target=pin.SE3(np.eye(3), target_position)
-        q_target=q.copy()
+        q_target = q.copy()
         for _ in range(100):
             pin.forwardKinematics(self.model, self.data, q_target)
             pin.updateFramePlacements(self.model, self.data)
-            # 计算当前末端位姿
-            current_M = self.data.oMf[self.ee_id]  #type: ignore
-            #算当前旋量误差
-            v_error:np.ndarray = pin.log6(T_target*current_M.inverse()).vector
-            if np.linalg.norm(v_error) < error_threshold:
+            current_M = self.data.oMf[self.ee_id]
+            R, p = current_M.rotation, current_M.translation
+            pitch = np.arctan2(-R[2, 0], np.hypot(R[0, 0], R[1, 0]))
+            yaw = np.arctan2(R[1, 0], R[0, 0])
+
+            # 任务误差：[位置误差, Pitch 误差]。
+            pitch_error = (self.target_pitch - pitch + np.pi) % (2 * np.pi) - np.pi
+            error = np.r_[target_position - p, pitch_error]
+            if np.linalg.norm(error) < error_threshold:
                 break
-            #计算雅可比矩阵
-            J = pin.computeFrameJacobian(self.model, self.data, q=q, frame_id=self.ee_id, reference_frame=pin.ReferenceFrame.WORLD)
-            #直接用伪逆求解关节速度
-            dq = np.linalg.pinv(J) @ v_error
-            #更新关节角
-            q_target += dq*0.1 
-       
+
+            # Pinocchio WORLD 旋量顺序是 [v, w]。
+            A = np.zeros((4, 6))
+            A[:3, :3] = np.eye(3)
+            A[:3, 3:] = -pin.skew(p)  # p_dot = v + w × p。
+            A[3, 3:] = [-np.sin(yaw), np.cos(yaw), 0]  # 世界系角速度 -> Pitch 速度。
+            J = pin.computeFrameJacobian(
+                self.model, self.data, q_target, self.ee_id, pin.ReferenceFrame.WORLD
+            )
+            J_task = A @ J
+            dq = np.linalg.pinv(J_task) @ error
+            q_target += dq * 0.1
+            q_target = np.clip(q_target, self.model.lowerPositionLimit, self.model.upperPositionLimit)
+
         return q_target
