@@ -49,15 +49,15 @@ class Controller:
             #计算雅可比矩阵
             J = pin.computeFrameJacobian(self.model, self.data, q=q, frame_id=self.ee_id, reference_frame=pin.ReferenceFrame.WORLD)
             #直接用伪逆求解关节速度 ,很慢
-            res=minimize(
-                fun=lambda q: 0.5*q.T @ H @ q,
-                x0=q_target,
-                constraints={"type": "eq", "fun": lambda q:J@q-v_error}
-            )
-
+            # res=minimize(
+            #     fun=lambda q: 0.5*q.T @ H @ q,
+            #     x0=q_target,
+            #     constraints={"type": "eq", "fun": lambda q:J@q-v_error}
+            # )
+            # q_target += res.x*0.1 
             dq = np.linalg.pinv(J) @ v_error
             #更新关节角
-            q_target += res.x*0.1 
+            q_target += dq*0.1 
 
             # print(f"迭代误差: {np.linalg.norm(v_error):.3f}, 当前关节角: {q_target}")
         #加上零空间
