@@ -5,6 +5,7 @@ from pathlib import Path
 import pinocchio as pin
 import numpy as np
 from scipy.optimize import minimize
+from comparison_log import ComparisonRecorder
 class Controller:
     def __init__(self):
         # 和 MuJoCo 读取同一份模型，固定基座、七个有界转动关节。
@@ -16,6 +17,7 @@ class Controller:
             raise ValueError("模型应为七个单自由度转动关节")
         if not self.model.existFrame("ee"):
             raise ValueError("模型中缺少末端 ee")
+        self.comparison = ComparisonRecorder(every=10)
 
     def compute(self, q, dq, ee_position, target_position, dt):
         """返回七个关节的目标角，或返回 None 保持上一条命令。
@@ -37,7 +39,7 @@ class Controller:
         H=np.diag(np.diag(pin.crba(self.model, self.data, q)))
         T_target=pin.SE3(np.eye(3), target_position)
         q_target=q.copy()
-        for _ in range(100):
+        for iteration in range(100):
             pin.forwardKinematics(self.model, self.data, q_target)
             pin.updateFramePlacements(self.model, self.data)
             # 计算当前末端位姿
@@ -56,6 +58,10 @@ class Controller:
             # )
             # q_target += res.x*0.1 
             dq = np.linalg.pinv(J) @ v_error
+            # 只比较加权参考解，不改变下面实际使用 dq 更新关节角的逻辑。
+            H_inv = np.linalg.pinv(H)
+            res = H_inv @ J.T @ np.linalg.pinv(J @ H_inv @ J.T) @ v_error
+            self.comparison.log(iteration, res, dq)
             #更新关节角
             q_target += dq*0.1 
 
@@ -67,4 +73,5 @@ class Controller:
         N = np.eye(7) - J_pinv @ J
         zero_q=np.ones(7)*0.0
         q_target += N @ zero_q
+        self.comparison.flush()
         return q_target

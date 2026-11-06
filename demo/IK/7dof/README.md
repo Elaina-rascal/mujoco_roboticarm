@@ -1,5 +1,29 @@
 # KUKA iiwa 14 七自由度位置控制练习
 
+## Visdom 关键帧记录与回放
+
+```bash
+python -m pip install -r demo/IK/7dof/requirements-recording.txt
+python demo/IK/7dof/run.py
+```
+
+控制程序只在本目录 `log/*.visdom.jsonl` 追加 Visdom 原生日志，不启动或连接查看器。
+每 10 次内部 IK 迭代取一帧，且保留每次求解的末帧；在 `controller.py` 的
+`ComparisonRecorder(every=10)` 修改间隔。每次求解结束时批量记录，横轴为跨求解递增的迭代编号。
+`res` 是惯性加权参考解，`dq` 是实际用于更新关节角的普通伪逆解，记录值均未乘 0.1。
+用于比较的加权解计算与写日志仍有开销，但不会逐帧请求网络。
+
+需要查看时，在宿主机（安装相同 Visdom 包）或容器中启动服务器，再用另一个终端回放：
+
+```bash
+python -m visdom.server -port 8097
+python demo/IK/7dof/view_comparison.py  # 默认最近一份日志，也可传入指定日志路径
+```
+
+打开 http://localhost:8097 并在环境列表选择 `res_vs_dq_时间戳`。
+七张曲线分别比较各关节的 res 与 dq，悬停可查看历史关键帧的具体值；另有差值范数曲线和最后关键帧的数值热力图。
+回放是恢复图表历史，不是带播放进度条的矩阵动画。重复回放同一日志会重新创建面板，不会重复累计曲线。
+
 ```bash
 python3 -m pip install mujoco numpy pin
 python3 demo/IK/run.py
@@ -54,4 +78,3 @@ MuJoCo 的 `data.qpos` 可以直接传给 Pinocchio，不需要索引映射、�
 `ArmSimulation.fk(q)` 返回 MuJoCo 算出的世界系末端 4×4 位姿，可核对自己实现的 FK，不会修改仿真状态。
 
 模型采用理想重力补偿，并关闭碰撞，便于先练习位置控制。关节目标按 KUKA 模型各关节的 `jnt_range` 限幅，七个关节的范围并不完全相同。上游来源与适配记录见 `models/kuka_iiwa_14/SOURCE.md`。
-
