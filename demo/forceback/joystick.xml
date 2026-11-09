@@ -1,0 +1,83 @@
+<mujoco model="robstride01_two_axis_joystick">
+  <compiler angle="radian" inertiafromgeom="false"/>
+  <option timestep="0.001" integrator="implicitfast" gravity="0 0 -9.81"/>
+  <visual>
+    <global azimuth="70" elevation="-15"/>
+    <headlight diffuse="0.8 0.8 0.8" ambient="0.3 0.3 0.3"/>
+  </visual>
+  <default>
+    <joint type="hinge" limited="true" range="-0.5235987756 0.5235987756"
+           damping="0.03" frictionloss="0.01"/>
+    <!-- Only explicit inertials contribute mass. Internal contacts are disabled;
+         the two joint stops represent the mechanical travel limit. -->
+    <geom contype="0" conaffinity="0" rgba="0.65 0.68 0.72 1"/>
+    <site size="0.006" rgba="1 0.3 0.1 1"/>
+    <motor gear="1" ctrllimited="true" ctrlrange="-17 17"
+           forcelimited="true" forcerange="-17 17"/>
+  </default>
+  <worldbody>
+    <light pos="0 -1 2" dir="0 0 -1"/>
+    <geom name="floor" type="plane" size="1 1 0.01" rgba="0.18 0.21 0.25 1"/>
+    <body name="base" pos="0 0 0.09">
+      <geom name="base_plate" type="box" pos="-0.035 0 -0.08" size="0.14 0.10 0.01"/>
+      <geom name="motor_x_support" type="box" pos="-0.09 0 -0.05" size="0.025 0.045 0.02"/>
+      <!-- Motor X housing is fixed, so its mass does not load either joint. -->
+      <body name="motor_x_housing" pos="-0.09 0 0">
+        <inertial pos="0 0 0" mass="0.38"
+                  diaginertia="0.000292706875 0.000197020104167 0.000197020104167"/>
+        <geom type="cylinder" size="0.03925 0.020" euler="0 1.57079632679 0" rgba="0.08 0.09 0.11 1"/>
+      </body>
+      <!-- Motor X output directly drives this mounting adapter and motor Y. -->
+      <body name="motor_mount">
+        <joint name="stick_x" axis="1 0 0"/>
+        <!-- 0.18 kg adapter, equivalent 0.10 x 0.04 x 0.09 m box. -->
+        <inertial pos="-0.025 0.020 0" mass="0.18"
+                  diaginertia="0.0001455 0.0002715 0.000174"/>
+        <geom name="motor_x_output" type="cylinder" pos="-0.0625 0 0"
+              size="0.013 0.0075" euler="0 1.57079632679 0" rgba="0.3 0.5 0.7 1"/>
+        <geom name="mount_side" type="box" pos="-0.05 0.010 0" size="0.006 0.022 0.045"/>
+        <geom name="mount_back" type="box" pos="0 0.026 0" size="0.05 0.006 0.045"/>
+        <!-- Motor Y center lies ON motor X output axis, with no lateral offset. -->
+        <body name="motor_y_housing">
+          <inertial pos="0 0 0" mass="0.38"
+                    diaginertia="0.000197020104167 0.000292706875 0.000197020104167"/>
+          <geom name="motor_y_case" type="cylinder" size="0.03925 0.020"
+                euler="1.57079632679 0 0" rgba="0.08 0.09 0.11 1"/>
+        </body>
+        <body name="inner_hub">
+          <joint name="stick_y" axis="0 1 0"/>
+          <!-- Output flange and bent adapter return the stick centerline to y=0. -->
+          <inertial pos="0 -0.016 0.028" mass="0.08"
+                    diaginertia="0.0000346666666667 0.0000346666666667 0.0000213333333333"/>
+          <geom name="motor_y_output" type="cylinder" pos="0 -0.025 0"
+                size="0.022 0.005" euler="1.57079632679 0 0" rgba="0.25 0.45 0.65 1"/>
+          <geom name="handle_adapter_front" type="box" pos="0 -0.032 0.025"
+                size="0.014 0.006 0.025" rgba="0.25 0.45 0.65 1"/>
+          <geom name="handle_adapter_top" type="box" pos="0 -0.016 0.050"
+                size="0.014 0.022 0.005" rgba="0.25 0.45 0.65 1"/>
+          <body name="stick" pos="0 0 0.1525">
+            <!-- 0.5 kg added handle: z=0.055..0.25 m, grip lever arm=0.25 m. -->
+            <inertial pos="0 0 0" mass="0.5"
+                      diaginertia="0.001602375 0.001602375 0.000036"/>
+            <geom name="handle" type="cylinder" size="0.012 0.0975" rgba="0.83 0.85 0.78 1"/>
+            <site name="grip" pos="0 0 0.0975"/>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <!-- Ideal joint-output torque: ctrl is N*m, no position/velocity servo. -->
+  <actuator>
+    <motor name="motor_x" joint="stick_x"/>
+    <motor name="motor_y" joint="stick_y"/>
+  </actuator>
+  <sensor>
+    <jointpos name="angle_x" joint="stick_x"/>
+    <jointpos name="angle_y" joint="stick_y"/>
+    <jointvel name="velocity_x" joint="stick_x"/>
+    <jointvel name="velocity_y" joint="stick_y"/>
+    <actuatorfrc name="torque_x" actuator="motor_x"/>
+    <actuatorfrc name="torque_y" actuator="motor_y"/>
+    <framepos name="grip_position" objtype="site" objname="grip"/>
+  </sensor>
+</mujoco>
