@@ -1,23 +1,36 @@
 #!/usr/bin/env python3
-"""零力矩交互查看；可在 MuJoCo 查看器中用鼠标施加外力。"""
+"""双轴阻抗与重力补偿；可在 MuJoCo 查看器中用鼠标施加外力。"""
 
 import argparse
 import time
 
 from simulation import JoystickSimulation
+from control import Controller
+
+
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--headless", action="store_true", help="无窗口运行")
     parser.add_argument("--seconds", type=float, default=5.0, help="无窗口仿真时长（秒）")
+    parser.add_argument("--mode", choices=("impedance", "gravity", "torque"),
+                        default="impedance", help="阻抗+重力补偿 / 仅重力补偿 / 手动力矩")
     args = parser.parse_args()
     if not 0 < args.seconds < float("inf"):
         parser.error("--seconds 必须为正的有限数值")
     sim = JoystickSimulation()
+    controller = None
+    if args.mode == "impedance":
+        controller = Controller()
+    elif args.mode == "gravity":
+        controller = Controller(stiffness=0.0, damping=0.0)
     sim.set_torque([0.0, 0.0])
     if args.headless:
         while sim.data.time < args.seconds:
+            if controller is not None:
+                tau = controller.update(sim.data.qpos, sim.data.qvel)
+                sim.set_torque(tau)
             sim.step()
         print(sim.state())
         return
@@ -32,9 +45,10 @@ def main():
             viewer.cam.elevation = -15
             start = time.monotonic()
             while viewer.is_running():
-                # 在此处用 sim.set_torque([tau_x, tau_y]) 接入未来的控制器。
-                # 当前不覆盖 ctrl，允许通过查看器 Control 面板手动调节力矩。
                 with viewer.lock():
+                    if controller is not None:
+                        tau = controller.update(sim.data.qpos, sim.data.qvel)
+                        sim.set_torque(tau)
                     sim.step()
                 viewer.sync()
                 time.sleep(max(0.0, start + sim.data.time - time.monotonic()))

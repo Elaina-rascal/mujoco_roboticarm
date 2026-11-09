@@ -8,14 +8,16 @@
 
 ## 运行
 
-安装项目基础依赖 `mujoco numpy` 后，在仓库根目录执行：
+安装依赖 `mujoco numpy scipy` 后，在仓库根目录执行：
 
 ```bash
 python3 demo/forceback/run.py
 python3 demo/forceback/run.py --headless --seconds 5
+python3 demo/forceback/run.py --mode gravity  # 仅重力补偿
+python3 demo/forceback/run.py --mode torque   # 手动力矩，初始为零
 ```
 
-脚本也支持从任意目录通过绝对路径启动。默认两个关节力矩均为零，不包含回中、重力补偿、阻抗或其他控制算法。可以在 MuJoCo 查看器的 Control 面板直接调整 `motor_x` / `motor_y` 的输出力矩，也可以用查看器的鼠标扰动交互（选中物体后 Ctrl + 鼠标右键拖动施加力）。
+脚本也支持从任意目录通过绝对路径启动。默认运行双轴阻抗与重力补偿，目标为竖直零位。可在 `run.py` 的 `Controller(...)` 构造处设置目标角、刚度与阻尼。默认末端刚度为 80 N/m，阻尼为 32 N·s/m，目标为两轴零位。可以用查看器的鼠标扰动交互（选中物体后 Ctrl + 鼠标右键拖动施加力），松开后摇杆返回目标。`--mode torque` 模式允许在查看器 Control 面板手动调整力矩；其他模式每步更新力矩。
 
 零力矩不保持竖直：连接件和输出连接座的侧向质心偏移在零位产生约 0.0228 N·m 的第一轴重力项；竖直摇杆也是不稳定平衡，受到扰动后会倾倒至机械限位。第二电机中心现位于第一轴线上，已取消旧模型中该电机 65 mm 侧偏引入的重力矩。限位为 MuJoCo 软约束，动态下允许少量越界。模型仅用关节限位约束行程，关闭所有几何接触以避免简化支架之间发生虚假碰撞。
 
@@ -64,12 +66,74 @@ print(sim.state())          # 角度、角速度、执行器力矩及握持点�
 
 MuJoCo 使用两个 `<motor gear="1">`，`data.ctrl` 直接对应输出端 N·m，不再乘 7.75 的减速比；Python 接口和 XML 均设置 ±17 N·m 限幅。峰值仅作仿真幅值上限，不表示真实电机可持续输出。`state()` 的力矩是执行器输出，不是用户手力；若以后需要模拟手部外力，应在 `grip` 位置施加世界系外力，例如用 `mujoco.mj_applyFT` 转换为广义力后写入 `data.qfrc_applied`，每步按需求更新或清零。
 
+## 运动学与动力学辅助函数
+
+`control.py` 用 NumPy 直接实现二维解析公式及双轴阻抗控制。`q=[q1,q2]` 对应两台电机的输出角，单位 rad。两轴正交，所以虽然只有两个关节，握持点仍用三维世界坐标表示。
+
+- `fk(q)`：返回握持点 `[x,y,z]`。
+- `jacobian(q)`：返回 3×2 位置雅可比，`v=J@dq`，速度在世界系表达。
+- `mass_matrix(q)`：2×2 惯性矩阵 `M`。
+- `coriolis_vector(q,dq)`：直接返回速度相关力矩 `c=C@dq`。
+- `gravity_vector(q)`：重力补偿力矩 `g`。
+- `friction_torque(dq)`：阻尼和滑动摩擦力矩 `f`。
+
+正运动学直接为：
+
+```text
+x = L*sin(q2)
+y = -L*sin(q1)*cos(q2)
+z = H + L*cos(q1)*cos(q2)
+L=0.25 m，H=0.09 m
+```
+
+在本目录运行：
+
+```python
+from control import fk, jacobian, mass_matrix, Controller
+
+q, dq = [0.1, -0.2], [0.3, -0.4]
+p = fk(q)
+v = jacobian(q) @ dq
+M = mass_matrix(q)
+tau = Controller().update(q, dq)
+```
+
+质量和惯量已经合并成文件顶部的几个常数，对应当前 `joystick.xml`，修改模型时需同步更新。控制器不做力矩限幅，接入仿真时使用 `sim.set_torque(tau)`。辅助函数不求解机械限位或零速静摩擦；零速摩擦近似取零。
+
+## 角度误差与两轴力臂
+
+轴一根据当前姿态取有效力臂 `r1=L*cos(q2)`，轴二使用固定力臂 `r2=L`。两轴都由角度误差计算末端位移和速度，得到末端弹簧阻尼力后，再换算为电机力矩：
+
+```text
+r = [L*cos(q2), L]
+delta_q = q_target-q         # 角度误差，rad
+s = r*delta_q                # 末端切向位移的局部近似，m
+v = r*dq                    # 当前末端切向速度，m/s；dq 为角速度
+F = K*s-D*v                 # 两轴末端力，N
+tau = r*F+g(q)              # 关节力矩，N*m
+```
+
+所有乘法均为逐元素乘法。这里区分角度误差 `delta_q` 和角速度 `dq`；轴二的位移为 `L*delta_q2`，速度为 `L*dq2`。轴一随第二轴倾角修正运动半径，不取世界 X/Y 的投影，也不使用完整空间位姿误差。位移是在当前姿态下按力臂换算的局部近似。
+
+K 的单位为 N/m，D 的单位为 N·s/m，可以是标量或两个轴各自的参数。默认 `K=80,D=32`，在零位时等效角刚度 `K*L²=5 N·m/rad`、角阻尼 `D*L²=2 N·m·s/rad`，与前一版角度控制在零位附近一致。
+
+```python
+from control import Controller
+
+controller = Controller(q_target=[0, 0], stiffness=80, damping=32)
+F = controller.impedance_force(q, dq)  # 可读取两轴末端力，N
+tau = controller.update(q, dq)
+sim.set_torque(tau)                    # 最终限幅至 ±17 N·m
+```
+
+`main()` 直接调用 `update(q,dq)`。控制器保留重力补偿，不补偿科氏力和摩擦。设置刚度、阻尼均为零时，仅输出重力补偿。FK、雅可比和动力学公式保留为独立辅助函数。
+
 ## 验证
 
 仓库根目录执行：
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_forceback.py' -v
+python3 -m unittest discover -s tests -p 'test_forceback*.py' -v
 ```
 
-覆盖两自由度质量矩阵、零位共面关系、电机壳体随动姿态、25 cm 握持距离、力矩映射与限幅、扰动下的仿真稳定性。
+覆盖两自由度质量矩阵、零位共面关系、电机壳体随动姿态、25 cm 握持距离、力矩映射与限幅、扰动下的仿真稳定性。解析辅助函数通过 MuJoCo 的末端位置、位置雅可比、质量矩阵和速度偏置交叉验证；控制器验证力臂与末端雅可比的一致性、两轴恢复力矩方向、阻尼耗能，以及受扰动后返回非零目标姿态。
