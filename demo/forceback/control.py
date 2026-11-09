@@ -35,11 +35,33 @@ def jacobian(q):
 class Controller:
     """末端弹簧阻尼+重力补偿；刚度 N/m、阻尼 N*s/m，可分别设置两轴参数。"""
 
-    def __init__(self, q_target=(0.0, 0.0), stiffness=80.0, damping=32.0):
+    def __init__(self, q_target=(0.0, 0.0), stiffness=40.0, damping=2.0,
+                 sine_amplitude=0.0, sine_frequency=50):
         self.q_target = np.array(q_target, dtype=float, copy=True)
         self.stiffness = np.array(stiffness, dtype=float, copy=True)
         self.damping = np.array(damping, dtype=float, copy=True)
+        self.tip_force = np.zeros(2)
+        self.sine_amplitude = sine_amplitude  # 局部 x 方向附加力幅值，N
+        self.sine_frequency = sine_frequency  # Hz
 
+    def set_tip_force(self, force):
+        """设置附加末端力 [Fx,Fy]（N），方向与弹簧力两分量一致，随杆转动。
+
+        持续生效；传入 [0,0] 清除。它与弹簧阻尼力相加后由电机主动输出。
+        """
+        force = np.asarray(force, dtype=float)
+        if force.shape != (2,) or not np.all(np.isfinite(force)):
+            raise ValueError("force 必须为两个有限数值，单位 N")
+        self.tip_force = force.copy()
+
+    def axis_levers(self, q):
+        """两轴有效力臂（m）。"""
+        return np.array([L*np.cos(q[1]), L])
+
+    def added_force(self, time):
+        """附加末端力：常值输入加局部 x 方向正弦力，time 单位 s。"""
+        sine_force = self.sine_amplitude*np.sin(2*np.pi*self.sine_frequency*time)
+        return self.tip_force + np.array([0.0, sine_force])
 
     def impedance_force(self, q, dq):
         """返回两轴末端切向力 [F1,F2]（N），这里只算力，不换算电机力矩。
@@ -51,7 +73,7 @@ class Controller:
         joint_velocity = np.asarray(dq, dtype=float)
 
         # 1. 当前有效力臂（m）：轴一随第二轴倾角变化，轴二固定为 L。
-        lever_arm = np.array([L*np.cos(joint_angle[1]), L])
+        lever_arm = self.axis_levers(joint_angle)
 
         # 2. 目标角度 - 当前角度（rad），正负号表示恢复方向。
         angle_error = self.q_target - joint_angle
@@ -68,16 +90,16 @@ class Controller:
         print(f"弹簧力(N)={spring_force} 阻尼力(N)={damping_force}")
         return tip_force
 
-    def update(self, q, dq):
-        """返回 r*F+g(q)，单位 N*m；轴一 r=L*cos(q2)，轴二 r=L。
+    def update(self, q, dq, time=0.0):
+        """返回 r*(F_impedance+F_added)+g(q)，单位 N*m。
 
         q 为 rad，dq 为 rad/s；刚度 K 为 N/m，阻尼 D 为 N*s/m。
         两轴逐元素计算，不做世界坐标投影或科氏力补偿。
         最终由仿真 set_torque() 限幅至 ±17 N*m。
         """
-        force = self.impedance_force(q, dq)
+        force = self.impedance_force(q, dq) + self.added_force(time)
         print(f"柯氏力为{coriolis_vector(q,dq)}")
-        return force + gravity_vector(q)
+        return self.axis_levers(q)*force + gravity_vector(q)
 
 
 def mass_matrix(q):
