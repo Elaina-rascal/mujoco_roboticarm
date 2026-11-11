@@ -1,4 +1,4 @@
-"""直接运行：python3 demo/IK/run.py。"""
+"""直接运行：python3 demo/IK/4dof/run.py。"""
 
 import time
 
@@ -9,7 +9,7 @@ from simulation import ArmSimulation
 
 
 # 直接在这里修改目标位置，单位 m，世界坐标系。
-TARGET_POSITION = [0.35, -0.15, 0.85]
+TARGET_POSITION = [0.22, -0.08, 0.20]
 STEPS_PER_CONTROL = 5  # 物理步长 0.002 s，控制周期 0.01 s。
 
 
@@ -21,8 +21,8 @@ def main():
     print("红点是末端，绿球是目标；在 controller.py 中实现 Controller.compute()。")
     try:
         with mujoco.viewer.launch_passive(sim.model, sim.data) as viewer:
-            viewer.cam.lookat[:] = [0.25, 0, 0.55]
-            viewer.cam.distance = 1.9
+            viewer.cam.lookat[:] = [0.12, 0, 0.15]
+            viewer.cam.distance = 0.65
             viewer.cam.azimuth = 135
             viewer.cam.elevation = -18
             start = time.monotonic()
