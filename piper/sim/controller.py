@@ -14,7 +14,7 @@ class Controller:
         full_model = pin.buildModelFromMJCF(str(MODEL_PATH))
         # 夹爪不参与 IK，锁定两个滑动关节，配置只保留六轴角度。
         finger_ids = [full_model.getJointId(name) for name in ("joint7", "joint8")]
-        self.model = pin.buildReducedModel(full_model, finger_ids, pin.neutral(full_model))
+        self.model = pin.buildReducedModel(full_model, finger_ids, pin.neutral(full_model)) #type:ignore
         self.data = self.model.createData()
         if self.model.nq != 6 or self.model.nv != 6:
             raise ValueError("模型应为六个单自由度转动关节")
@@ -31,13 +31,14 @@ class Controller:
         if self.target_rotation is None:
             pin.forwardKinematics(self.model, self.data, q_target)
             pin.updateFramePlacements(self.model, self.data)
-            self.target_rotation = self.data.oMf[self.ee_id].rotation.copy()
-        target = pin.SE3(self.target_rotation, vector(target_position, 3))
+            self.target_rotation = self.data.oMf[self.ee_id].rotation.copy() #type:ignore
+        
+        target = pin.SE3( np.eye(3), vector(target_position, 3))
         error_threshold = 1e-3
         for _ in range(100):
             pin.forwardKinematics(self.model, self.data, q_target)
             pin.updateFramePlacements(self.model, self.data)
-            current = self.data.oMf[self.ee_id]
+            current = self.data.oMf[self.ee_id] #type:ignore
             error = pin.log6(target * current.inverse()).vector
             if np.linalg.norm(error) < error_threshold:
                 break
