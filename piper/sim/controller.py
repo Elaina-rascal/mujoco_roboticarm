@@ -26,8 +26,6 @@ class Controller:
             raise ValueError("模型中缺少末端 ee")
         self.ee_id = self.model.getFrameId("ee")
         self.target_rotation = None  # 首次控制时记录初始朝向，也可直接设置 3×3 目标旋转矩阵。
-        self.last_error = float("inf")
-        self.converged = False
 
     def compute(self, q, dq, ee_position, target_position, dt):
         """返回六轴目标角；目标位置为世界系，朝向由 target_rotation 指定。"""
@@ -37,7 +35,7 @@ class Controller:
             pin.updateFramePlacements(self.model, self.data)
             self.target_rotation = self.data.oMf[self.ee_id].rotation.copy() #type:ignore
         
-        target = pin.SE3( self.target_rotation, vector(target_position, 3))
+        target = pin.SE3( np.eye(3), vector(target_position, 3))
         error_threshold = 1e-3
         for _ in range(100):
             pin.forwardKinematics(self.model, self.data, q_target)
@@ -61,9 +59,9 @@ class Controller:
         q_clip = np.clip(
                         q_target, self.model.lowerPositionLimit, self.model.upperPositionLimit)
         dq=q_target-q_clip
-        pin.forwardKinematics(self.model, self.data, q_clip)
-        pin.updateFramePlacements(self.model, self.data)
-        error = pin.log6(target * self.data.oMf[self.ee_id].inverse()).vector
-        self.last_error = float(np.linalg.norm(error))
-        self.converged = self.last_error < error_threshold
+        for q in zip(q_clip,q_target):
+            pin.forwardKinematics(self.model, self.data, q_clip)
+            pin.updateFramePlacements(self.model, self.data)
+            error=pin.log6(target * self.data.oMf[self.ee_id].inverse()).vector
+        
         return q_clip
