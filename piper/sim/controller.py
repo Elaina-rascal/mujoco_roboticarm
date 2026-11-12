@@ -1,4 +1,4 @@
-"""Pinocchio 六轴位置 IK，基于 SVD 的阻尼最小二乘。"""
+"""Pinocchio 六轴 xyz + w_pitch IK，基于 SVD 的阻尼最小二乘。"""
 
 import numpy as np
 import pinocchio as pin
@@ -10,11 +10,14 @@ else:
 
 counter = count(1)
 class Controller:
-    def __init__(self, damping=0.01):
+    def __init__(self, damping=0.01, target_pitch=0.0):
         """damping 为 DLS 的 λ，正规方程中的阻尼项为 λ²I。"""
         self.damping = float(damping)
         if not np.isfinite(self.damping) or self.damping <= 0:
             raise ValueError("damping 必须为有限正数")
+        self.target_pitch = float(target_pitch)
+        if not np.isfinite(self.target_pitch):
+            raise ValueError("target_pitch 必须为有限数值，单位 rad")
         full_model = pin.buildModelFromMJCF(str(MODEL_PATH))
         # 夹爪不参与 IK，锁定两个滑动关节，配置只保留六轴角度。
         finger_ids = [full_model.getJointId(name) for name in ("joint7", "joint8")]
@@ -27,22 +30,26 @@ class Controller:
         self.ee_id = self.model.getFrameId("ee")
 
     def compute(self, q, dq, ee_position, target_position, dt):
-        """返回六轴目标角；只跟踪世界系 xyz 位置，不约束末端朝向。"""
+        """返回六轴目标角；跟踪世界系 xyz 与 SO(3) 误差的 y 分量。"""
         q_target = vector(q, 6).copy()
         target = vector(target_position, 3)
+        target_rotation = pin.exp3(np.array([0.0, self.target_pitch, 0.0]))
         error_threshold = 1e-3
         for _ in range(100):
             pin.forwardKinematics(self.model, self.data, q_target)
             pin.updateFramePlacements(self.model, self.data)
             current = self.data.oMf[self.ee_id] #type:ignore
-            error = target - current.translation
+            # R_target R_currentᵀ 的 log3 是世界系旋转误差，与 LWA 配套。
+            rotation_error = pin.log3(target_rotation @ current.rotation.T)
+            error = np.r_[target - current.translation, rotation_error[0],rotation_error[2]]
             if np.linalg.norm(error) < error_threshold:
                 break
-            # LWA 的线速度是末端原点在世界系的速度，与 xyz 位置误差配套。
+            # LWA 顺序为 [vx, vy, vz, wx, wy, wz]，只保留 xyz 和 wy。
+            # w_pitch 指世界系 y 角速度分量，并非一般姿态下的欧拉 pitch 导数。
             jac = pin.computeFrameJacobian(
                 self.model, self.data, q_target, self.ee_id,
                 pin.ReferenceFrame.LOCAL_WORLD_ALIGNED,
-            )[:3, :]
+            )[[0, 1, 2, 3,5], :]
             # DLS: dq = V diag(σ / (σ² + λ²)) Uᵀ error。
             # 小奇异值对应的增益趋向 0，避免普通伪逆的 1/σ 放大。
             u, singular_values, vt = np.linalg.svd(jac, full_matrices=False)
