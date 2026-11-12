@@ -8,6 +8,9 @@ import numpy as np
 
 MODEL_PATH = Path(__file__).with_name("arm.xml")
 ARM_JOINT_NAMES = tuple(f"joint{i}" for i in range(1, 7))
+# 夹爪参考系 B 相对于模型 ee 的固定旋转：X_B=Z_ee, Y_B=Y_ee, Z_B=-X_ee。
+# 控制与显示共用这一约定，水平正放时 X 向前、Y 向左、Z 向上。
+EE_TO_BODY_ROTATION = np.array([[0.0, 0.0, -1.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]])
 
 
 def vector(values, size):
@@ -61,6 +64,27 @@ class ArmSimulation:
         for _ in range(count):
             mujoco.mj_step(self.model, self.data)
         mujoco.mj_forward(self.model, self.data)
+
+    def draw_ee_frames(self, viewer):
+        """画控制器所用夹爪参考系 B：三根箭头是 R_WB 的三个列向量。"""
+        origin = self.data.site_xpos[self.ee_id].copy()
+        body_rotation = self.data.site_xmat[self.ee_id].reshape(3, 3) @ EE_TO_BODY_ROTATION
+        colors = np.array([[1, 0.1, 0.1, 1], [0.1, 1, 0.1, 1], [0.1, 0.4, 1, 1]])
+        with viewer.lock():
+            scene = viewer.user_scn
+            scene.ngeom = 0
+            for axis, axis_name in enumerate("XYZ"):
+                geom = scene.geoms[scene.ngeom]
+                mujoco.mjv_initGeom(
+                    geom, mujoco.mjtGeom.mjGEOM_ARROW,
+                    np.zeros(3), origin, np.eye(3).ravel(), colors[axis],
+                )
+                mujoco.mjv_connector(
+                    geom, mujoco.mjtGeom.mjGEOM_ARROW, 0.006,
+                    origin, origin + 0.18 * body_rotation[:, axis],
+                )
+                geom.label = f"body.{axis_name}"
+                scene.ngeom += 1
 
     def fk(self, q):
         """六轴角度 → 世界系夹爪中心 4×4 位姿，不改变仿真状态。"""

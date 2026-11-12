@@ -24,6 +24,7 @@ def main():
     controller = Controller()
     dt = float(sim.model.opt.timestep) * STEPS_PER_CONTROL
     print("PiPER 夹爪 IK：约束模式和目标 pitch 在 controller.py 中配置，绿球为位置目标。")
+    print("末端仅显示 body 坐标轴：红X、绿Y、蓝Z，轴长 18 cm，随夹爪旋转。")
     print("双击绿球，按住 Ctrl + 鼠标右键拖动；关闭窗口或 Ctrl+C 退出。")
     try:
         with mujoco.viewer.launch_passive(sim.model, sim.data) as viewer:
@@ -38,6 +39,7 @@ def main():
                 if command is not None:
                     sim.set_command(command)
                 sim.step(STEPS_PER_CONTROL)
+                sim.draw_ee_frames(viewer)
                 viewer.sync()
                 time.sleep(max(0.0, start + float(sim.data.time) - time.monotonic()))
     except KeyboardInterrupt:
