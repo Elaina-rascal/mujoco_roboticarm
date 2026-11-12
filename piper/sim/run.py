@@ -23,7 +23,7 @@ def main():
     sim.set_gripper(GRIPPER_WIDTH)
     controller = Controller()
     dt = float(sim.model.opt.timestep) * STEPS_PER_CONTROL
-    print("PiPER 六轴位姿 IK：红点为夹爪中心，绿球为目标，末端保持初始朝向。")
+    print("PiPER 六轴位置 IK：红点为夹爪中心，绿球为目标，只跟踪位置，末端朝向自由。")
     print("双击绿球，按住 Ctrl + 鼠标右键拖动；关闭窗口或 Ctrl+C 退出。")
     try:
         with mujoco.viewer.launch_passive(sim.model, sim.data) as viewer:
