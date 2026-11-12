@@ -11,7 +11,7 @@ except ImportError:
 
 
 TARGET_POSITION = [0.30, -0.10, 0.35]  # m，世界系；运行后可拖动绿球。
-TARGET_PITCH = 0.0  # rad，目标旋转为绕世界系 y 轴旋转，仅跟踪 SO(3) 误差的 y 分量。
+TARGET_PITCH = 0.0  # rad，夹爪参考系的 pitch；roll、yaw 自由。
 GRIPPER_WIDTH = 0.04  # m，双指总开度。
 STEPS_PER_CONTROL = 5  # 物理 0.002 s，控制 0.01 s。
 
@@ -24,7 +24,7 @@ def main():
     sim.set_gripper(GRIPPER_WIDTH)
     controller = Controller(target_pitch=TARGET_PITCH)
     dt = float(sim.model.opt.timestep) * STEPS_PER_CONTROL
-    print("PiPER 六轴 xyz + w_pitch IK：红点为夹爪中心，绿球为目标，跟踪位置和世界系旋转误差的 y 分量。")
+    print(f"PiPER 夹爪 pitch IK：H=[1,1,1,0,1,0]，pitch={TARGET_PITCH} rad，roll、yaw 自由。")
     print("双击绿球，按住 Ctrl + 鼠标右键拖动；关闭窗口或 Ctrl+C 退出。")
     try:
         with mujoco.viewer.launch_passive(sim.model, sim.data) as viewer:
