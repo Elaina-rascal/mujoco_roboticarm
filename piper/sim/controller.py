@@ -2,7 +2,6 @@
 
 import numpy as np
 import pinocchio as pin
-from itertools import count
 if __package__:
     from .simulation import MODEL_PATH, vector
 else:
@@ -12,19 +11,18 @@ else:
 CONSTRAINT_MODE = "h"  # "euler": roll/yaw 自由；"h": 仅世界系 yaw 自由。
 TARGET_PITCH = 0.0  # rad，夹爪参考系目标 pitch。
 
-counter = count(1)
 class Controller:
     def __init__(self, damping=0.01, target_pitch=TARGET_PITCH, constraint_mode=None):
         """damping 为 DLS 的 λ，正规方程中的阻尼项为 λ²I。"""
         self.damping = float(damping)
-        if not np.isfinite(self.damping) or self.damping <= 0:
-            raise ValueError("damping 必须为有限正数")
+        self.min_singular_value = 1e-3
+        self.max_task_error = 1e-3  # H 约束后的位姿误差范数，包含 m 和 rad。
+        self.max_joint_change = np.deg2rad(30)  # 初始 q 到最终 q 的单轴最大变化。
+        
         self.target_pitch = float(target_pitch)
-        if not np.isfinite(self.target_pitch):
-            raise ValueError("target_pitch 必须为有限数值，单位 rad")
+        
         self.constraint_mode = CONSTRAINT_MODE if constraint_mode is None else constraint_mode
-        if self.constraint_mode not in ("euler", "h"):
-            raise ValueError('constraint_mode 必须为 "euler" 或 "h"')
+        
         self.target_rpy = np.array([0.0, self.target_pitch, 0.0])
         self.target_rotation = pin.rpy.rpyToMatrix(self.target_rpy)
         full_model = pin.buildModelFromMJCF(str(MODEL_PATH))
@@ -44,6 +42,7 @@ class Controller:
             [1.0, 1.0, 1.0, 0.0, 1.0, 0.0] if self.constraint_mode == "euler"
             else [1.0, 1.0, 1.0, 1.0, 1.0, 0.0]
         )
+        self.task_dimension = np.count_nonzero(np.diag(self.H))
 
     def _orientation_constraint(self, level_rotation):
         """返回姿态误差和使 error_dot=-A@omega_world 的映射 A。"""
@@ -63,20 +62,52 @@ class Controller:
             rate_map = pin.Jlog3(E.T)
         return error, rate_map
 
+    def check(self, singular_values, error, q_initial, q_final):
+        """检查最终雅可比、任务残差和关节变化，决定是否接受 IK 结果。"""
+        error_norm = np.linalg.norm(self.H @ error)
+        if not np.isfinite(error_norm):
+            print("IK 拒绝：最终位姿误差包含非有限数值")
+            return False
+        if error_norm > self.max_task_error:
+            print(f"IK 拒绝：最终位姿误差 {error_norm:.6f} > {self.max_task_error:.6f}")
+            return False
+
+        # H 的未约束行会产生固定零奇异值，只检查任务维度内的最小值。
+        min_singular_value = singular_values[self.task_dimension - 1]
+        if not np.all(np.isfinite(singular_values)):
+            print("IK 拒绝：最终奇异值包含非有限数值")
+            return False
+        if min_singular_value < self.min_singular_value:
+            print(f"IK 拒绝：最小有效奇异值 {min_singular_value:.6f} < {self.min_singular_value:.6f}")
+            return False
+
+        q_error = pin.difference(self.model, q_initial, q_final)
+        if not np.all(np.isfinite(q_error)):
+            print("IK 拒绝：关节变化包含非有限数值")
+            return False
+        joint_index = np.argmax(np.abs(q_error))
+        max_change = abs(q_error[joint_index])
+        if max_change > self.max_joint_change:
+            print(
+                f"IK 拒绝：joint{joint_index + 1} 变化 {max_change:.6f} rad"
+                f" > {self.max_joint_change:.6f} rad"
+            )
+            return False
+        return True
+
     def compute(self, q, dq, ee_position, target_position, dt):
         """根据初始化选定的模式构造姿态约束，并与 xyz 共同求解。"""
-        q_target = vector(q, 6).copy()
+        q_initial = vector(q, 6).copy()
+        q_target = q_initial.copy()
         target = vector(target_position, 3)
-        error_threshold = 1e-3
-        for _ in range(100):
+        # 最多更新 100 次；_=100 时重新计算最终 q 对应的误差和奇异值。
+        for _ in range(101):
             pin.forwardKinematics(self.model, self.data, q_target)
             pin.updateFramePlacements(self.model, self.data)
             current = self.data.oMf[self.ee_id] #type:ignore
             level_rotation = current.rotation @ self.ee_to_level
             orientation_error, orientation_rate_map = self._orientation_constraint(level_rotation)
             error = self.H @ np.r_[target - current.translation, orientation_error]
-            if np.linalg.norm(error) < error_threshold:
-                break
             # LWA 的线速度是末端原点速度，角速度对应 R_new=Exp(dw)@R。
             jac_lwa = pin.computeFrameJacobian(
                 self.model, self.data, q_target, self.ee_id,
@@ -89,11 +120,14 @@ class Controller:
             # DLS: dq = V diag(σ / (σ² + λ²)) Uᵀ error。
             # 小奇异值对应的增益趋向 0，避免普通伪逆的 1/σ 放大。
             u, singular_values, vt = np.linalg.svd(jac, full_matrices=False)
+            if _ == 100 or np.linalg.norm(error) <= self.max_task_error:
+                if self.check(singular_values, error, q_initial, q_target):
+                    return q_target
+                return q_initial
+
             gains = singular_values / (singular_values**2 + self.damping**2)
             dq = vt.T @ (gains * (u.T @ error))
-            print(f"奇异值{singular_values}") if next(counter) % 10000 == 0 else None
             q_target = pin.integrate(self.model, q_target, dq * 0.1)
-            
-        return np.clip(
-            q_target, self.model.lowerPositionLimit, self.model.upperPositionLimit
-        )
+            q_target = np.clip(
+                q_target, self.model.lowerPositionLimit, self.model.upperPositionLimit
+            )

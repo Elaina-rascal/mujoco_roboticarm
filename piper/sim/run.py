@@ -10,7 +10,6 @@ except ImportError:
     from simulation import ArmSimulation
 
 
-TARGET_POSITION = [0.30, -0.10, 0.35]  # m，世界系；运行后可拖动绿球。
 GRIPPER_WIDTH = 0.04  # m，双指总开度。
 STEPS_PER_CONTROL = 5  # 物理 0.002 s，控制 0.01 s。
 
@@ -19,7 +18,8 @@ def main():
     import mujoco.viewer
 
     sim = ArmSimulation()
-    sim.set_target(TARGET_POSITION)
+    _, _, ee_position, _ = sim.state()
+    sim.set_target(ee_position)
     sim.set_gripper(GRIPPER_WIDTH)
     controller = Controller()
     dt = float(sim.model.opt.timestep) * STEPS_PER_CONTROL

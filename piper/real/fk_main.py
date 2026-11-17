@@ -1,4 +1,4 @@
-"""运行：python3 piper/real/fk_main.py，读取关节角并计算 FK。"""
+"""运行：python3 piper/real/fk_main.py，发送目标关节角并显示反馈 FK。"""
 
 import time
 
@@ -11,17 +11,21 @@ from piper_arm import Piper
 
 CONTROL_PERIOD = 1 / 200  # s
 PRINT_PERIOD = 0.1  # s
+TARGET_POSITIONS = [-0.034662, 0.002286, -0.319762, 0.201079, 0.469424, -0.052325]
 
 
 def main():
     piper = Piper(can_name="can_piper")
     fk = ForwardKinematics()
     np.set_printoptions(precision=6, suppress=True)
-    next_tick = time.perf_counter()
-    next_print = next_tick
-
     try:
+        while not piper.sdk.EnablePiper():
+            time.sleep(0.01)
+
+        next_tick = time.perf_counter()
+        next_print = next_tick
         while True:
+            piper.send_joint_positions(TARGET_POSITIONS, speed_percent=10)
             q = piper.read_joint_positions()
             transform = fk.compute(q).np
             now = time.perf_counter()
