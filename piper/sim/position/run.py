@@ -1,4 +1,4 @@
-"""直接运行：python3 piper/sim/run.py。"""
+"""直接运行：python3 piper/sim/position/run.py。"""
 
 import time
 

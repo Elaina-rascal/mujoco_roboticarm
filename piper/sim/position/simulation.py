@@ -6,7 +6,7 @@ import mujoco
 import numpy as np
 
 
-MODEL_PATH = Path(__file__).with_name("arm.xml")
+MODEL_PATH = Path(__file__).resolve().parents[1] / "arm.xml"
 ARM_JOINT_NAMES = tuple(f"joint{i}" for i in range(1, 7))
 # 夹爪参考系 B 相对于模型 ee 的固定旋转：X_B=Z_ee, Y_B=Y_ee, Z_B=-X_ee。
 # 控制与显示共用这一约定，水平正放时 X 向前、Y 向左、Z 向上。
