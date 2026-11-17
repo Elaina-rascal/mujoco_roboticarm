@@ -7,6 +7,7 @@ import pinocchio as pin
 
 from fk import ForwardKinematics
 from piper_arm import Piper
+from Digital_Twin import DigitalTwin
 
 
 CONTROL_PERIOD = 1 / 200  # s
@@ -17,6 +18,7 @@ TARGET_POSITIONS = [-0.034662, 0.002286, -0.319762, 0.201079, 0.469424, -0.05232
 def main():
     piper = Piper(can_name="can_piper")
     fk = ForwardKinematics()
+    twin = DigitalTwin()
     np.set_printoptions(precision=6, suppress=True)
     try:
         while not piper.sdk.EnablePiper():
@@ -25,8 +27,9 @@ def main():
         next_tick = time.perf_counter()
         next_print = next_tick
         while True:
-            piper.send_joint_positions(TARGET_POSITIONS, speed_percent=10)
+            # piper.send_joint_positions(TARGET_POSITIONS, speed_percent=10)
             q = piper.read_joint_positions()
+            twin.update(q)
             transform = fk.compute(q).np
             now = time.perf_counter()
             if now >= next_print:
@@ -40,6 +43,7 @@ def main():
             next_tick += CONTROL_PERIOD
             time.sleep(max(0, next_tick - time.perf_counter()))
     finally:
+        twin.close()
         piper.close()
 
 
