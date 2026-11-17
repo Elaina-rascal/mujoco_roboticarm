@@ -15,13 +15,15 @@ PRINT_PERIOD = 0.1  # s
 
 
 def main():
-    piper = Piper(can_name="can_piper")
+    piper = Piper(can_name="can_piper", mode="position")
     control = PinocchioControl()
     # 等到首帧真实反馈，再确定目标球起点。
     while piper.sdk.GetArmJointMsgs().time_stamp == 0:
         time.sleep(CONTROL_PERIOD)
     q = piper.read_joint_positions()
-    twin = DigitalTwin(q, control.fk(q).translation)
+    initial_pose = control.fk(q)
+    initial_target_position = initial_pose.translation.copy()
+    twin = DigitalTwin(q, initial_target_position)
     np.set_printoptions(precision=6, suppress=True)
     try:
         while not piper.sdk.EnablePiper():

@@ -15,7 +15,7 @@ class PinocchioControl:
         self.damping = damping
         self.min_singular_value = 1e-3
         self.max_task_error = 1e-3  # H 约束后的位姿误差，包含 m 和 rad。
-        self.max_joint_change = np.deg2rad(30)
+        self.max_joint_change = np.deg2rad(50)
         self.ee_to_level = EE_TO_LEVEL.copy()
         self.H = np.diag([1.0, 1.0, 1.0, 1.0, 1.0, 0.0])
         self.task_dimension = 5
@@ -37,6 +37,11 @@ class PinocchioControl:
         pin.updateFramePlacements(self.model, self.data)
         pose = self.data.oMf[self.ee_id] #type:ignore
         return pin.SE3(pose.rotation @ self.ee_to_level, pose.translation.copy())
+
+    def gravity(self, joint_positions):
+        """返回六轴重力补偿力矩（N·m）；夹爪沿用六轴模型中的固定姿态。"""
+        q = np.asarray(joint_positions, dtype=float)
+        return pin.computeGeneralizedGravity(self.model, self.data, q).copy()
 
     def ik(self, joint_positions, target_position):
         """求目标位置的六轴角度；工具保持水平，世界 yaw 自由，失败则返回初始 q。"""
