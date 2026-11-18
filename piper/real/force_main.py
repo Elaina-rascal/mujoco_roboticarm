@@ -12,7 +12,7 @@ from piper_arm import Piper
 CONTROL_PERIOD = 1 / 200  # s
 PRINT_PERIOD = 0.1  # s
 HOLD_POSITIONS = np.array([0.114214, 0.586248, -0.464362, 0.019862, 0.192911, -0.019862])
-KP = 0.5
+KP = 1.0
 KD = 0.01
 
 
@@ -32,6 +32,7 @@ def main():
         # 使能后读取当前姿态，后续固定保持该目标。
         hold_positions = piper.read_joint_positions().copy()
         print("保持目标(rad):", hold_positions)
+        print("力矩反馈为电流估算幅值；包含 PD 输出，幅值差不等于力矩跟踪误差。")
         next_tick = time.perf_counter()
         next_print = next_tick
         while True:
@@ -43,9 +44,13 @@ def main():
             twin.update(q)
 
             if now >= next_print:
+                feedback_torque = piper.read_joint_torques()
+                feedforward_magnitude = np.abs(gravity_torque)
                 print("关节角(rad):", q)
                 print("相对保持目标的偏差(rad):", q - HOLD_POSITIONS)
-                print("重力补偿力矩(N·m):", gravity_torque)
+                print("前馈幅值(N·m):", feedforward_magnitude)
+                print("反馈幅值(N·m):", feedback_torque)
+                print("其他力矩(N·m):", feedback_torque - feedforward_magnitude)
                 next_print = now + PRINT_PERIOD
 
             next_tick += CONTROL_PERIOD

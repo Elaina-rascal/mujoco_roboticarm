@@ -15,19 +15,14 @@ class Piper:
     def __init__(self, can_name="can_piper", mode="position"):
         if mode not in ("position", "mit"):
             raise ValueError('mode 需要为 "position" 或 "mit"')
-        # 官方 V2 FAQ：电机执行力矩为 MIT t_ref 的 4 倍。
-        self.torque_scale = 4.0
         self.sdk = C_PiperInterface_V2(can_name=can_name, judge_flag=True)
         self.sdk.ConnectPort()
         try:
-            self.firmware_version, version = self._read_firmware_version()
+            self.firmware_version, _ = self._read_firmware_version()
         except Exception:
             self.sdk.DisconnectPort()
             raise
         print(f"\033[38;2;200;162;255m[Piper] 当前主控固件：{self.firmware_version}\033[0m", flush=True)
-        # Reimagine-Robotics/piper_control: 1.7-3 起取消旧 MIT 方向补偿。
-        # https://github.com/Reimagine-Robotics/piper_control/blob/main/src/piper_control/piper_control.py
-        self._mit_sign = np.array([-1, -1, 1, -1, 1, -1] if version < (1, 7, 3) else [1] * 6)
         if mode == "position":
             self.sdk.MotionCtrl_2(0x01, 0x01, 10, 0x00)
         else:
@@ -53,9 +48,13 @@ class Piper:
 
     def send_mit(self, positions,torques,kp=KP, kd=KD):
         """发送六轴 MIT 指令：目标角 rad、PD 增益、前馈力矩 N·m，目标速度为零。"""
+        if self.firmware_version != "S-V1.5-8":
+            raise NotImplementedError(f"MIT 换算仅适配 S-V1.5-8，当前为 {self.firmware_version}")
+        # 旧固件 J1/J2/J4/J6 反号；保留当前 1.5-8 前馈除以 4 的换算。
+        mit_sign = np.array([-1, -1, 1, -1, 1, -1])
         # 当前 SDK 的 MIT t_ref 编码范围为 [-8, 8]。
-        positions = np.asarray(positions) * self._mit_sign
-        targets = np.clip(np.asarray(torques) / self.torque_scale, -8.0, 8.0) * self._mit_sign
+        positions = np.asarray(positions) * mit_sign
+        targets = np.clip(np.asarray(torques) / 4.0, -8.0, 8.0) * mit_sign
         kp = np.broadcast_to(kp, (6,))
         kd = np.broadcast_to(kd, (6,))
         self.sdk.MotionCtrl_2(0x01, 0x04, 0, 0xAD)
@@ -64,12 +63,34 @@ class Piper:
                 i + 1, float(positions[i]), 0.0,
                 float(kp[i]), float(kd[i]), float(targets[i]),
             )
+        self.last_mit_t_ref = targets.copy()
 
     def read_joint_positions(self):
         """读取 SDK 缓存的 joint1～joint6 角度（rad）。"""
         joints = deepcopy(self.sdk.GetArmJointMsgs()).joint_state
         angles = [getattr(joints, f"joint_{i}") for i in range(1, 7)]
         return np.deg2rad(np.array(angles) * 0.001)
+
+    def read_joint_torques(self):
+        """标准版六轴电流估算力矩（N·m），保留 SDK 符号；缺失轴为 NaN。
+
+        仅适配 S-V1.5-8。沿用现行官方 k*b*c 系数，尚未做真机负载
+        和方向标定；不使用旧 SDK effort，也不套用 MIT 发送反号。
+        """
+        if self.firmware_version != "S-V1.5-8":
+            raise NotImplementedError(f"力矩反馈换算仅适配 S-V1.5-8，当前为 {self.firmware_version}")
+        feedback = deepcopy(self.sdk.GetArmHighSpdInfoMsgs())
+        current_ma = np.full(6, np.nan)
+        for i in range(6):
+            motor = getattr(feedback, f"motor_{i + 1}")
+            if motor.can_id == 0x251 + i:
+                current_ma[i] = float(motor.current)
+        # 标准版 PIPER 专用，不能用于 PIPER-H/L/X。
+        # https://github.com/agilexrobotics/pyAgxArm/blob/master/pyAgxArm/api/constants.py
+        k = np.array([1.18125, 1.18125, 1.18125, 0.9576, 0.9576, 0.9576])
+        b = np.array([4., 4., 4., 1., 1., 1.])
+        c = np.array([1., 1., 1., 0.813252, 0.813252, 0.813252])
+        return current_ma * 0.001 * k * b * c
 
     def close(self):
         self.sdk.DisconnectPort()
