@@ -11,11 +11,11 @@ from piper_arm import Piper
 
 CONTROL_PERIOD = 1 / 200  # s
 PRINT_PERIOD = 0.1  # s
-HOLD_POSITIONS = np.array([0.114214, 0.357548, -0.464362, 0.019862, 0.192911, -0.019862])
+HOLD_POSITIONS = np.array([0.114214, 0.586248, -0.464362, 0.019862, 0.192911, -0.019862])
 KP = 10.0
 KD = 0.8
-TEST_JOINT = 1  # 1～6，其他关节保持 PD，前馈力矩为零。
-TEST_TORQUE = 0.5  # 输出端附加力矩 N·m，下发时由 Piper 换算为 MIT t_ref。
+TEST_JOINT = 6  # 1～6，其他关节保持 PD，前馈力矩为零。
+TEST_TORQUE = 0.25  # 按当前 torque_scale 换算的附加力矩 N·m。
 PHASE_DURATION = 3.0  # s；依次 0、正力矩、0、负力矩、0，最后保持零前馈。
 
 
@@ -35,6 +35,7 @@ def main():
         next_tick = time.perf_counter()
         start_time = next_tick
         next_print = next_tick
+        time.sleep(3)
         while True:
             q = piper.read_joint_positions()
             now = time.perf_counter()

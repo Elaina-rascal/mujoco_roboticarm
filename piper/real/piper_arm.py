@@ -14,7 +14,7 @@ class Piper:
         # 官方 V2 FAQ：电机执行力矩为 MIT t_ref 的 4 倍。
         self.torque_scale = 4.0
         self.sdk = C_PiperInterface_V2(can_name=can_name, judge_flag=True)
-        self.sdk.ConnectPort(piper_init=False)
+        self.sdk.ConnectPort()
         if mode == "position":
             self.sdk.MotionCtrl_2(0x01, 0x01, 10, 0x00)
         else:

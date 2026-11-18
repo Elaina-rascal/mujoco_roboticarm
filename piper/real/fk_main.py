@@ -12,6 +12,9 @@ from digital_twin import DigitalTwin
 
 CONTROL_PERIOD = 1 / 200  # s
 PRINT_PERIOD = 0.1  # s
+HOLD_POSITIONS = np.array([0.114214, 0.586248, -0.464362, 0.019862, 0.192911, -0.019862])
+STARTUP_TIMEOUT = 30.0  # s
+STARTUP_TOLERANCE = 0.02  # rad
 
 
 def main():
@@ -21,13 +24,33 @@ def main():
     while piper.sdk.GetArmJointMsgs().time_stamp == 0:
         time.sleep(CONTROL_PERIOD)
     q = piper.read_joint_positions()
-    initial_pose = control.fk(q)
-    initial_target_position = initial_pose.translation.copy()
-    twin = DigitalTwin(q, initial_target_position)
+    twin = None
     np.set_printoptions(precision=6, suppress=True)
     try:
         while not piper.sdk.EnablePiper():
             time.sleep(0.01)
+
+        print("普通位置模式，上电默认目标(rad):", HOLD_POSITIONS)
+        deadline = time.monotonic() + STARTUP_TIMEOUT
+        next_print = 0.0
+        while True:
+            piper.send_joint_positions(HOLD_POSITIONS, speed_percent=10)
+            time.sleep(CONTROL_PERIOD)
+            q = piper.read_joint_positions()
+            error = q - HOLD_POSITIONS
+            now = time.monotonic()
+            if now >= next_print:
+                print("启动关节角(rad):", q)
+                print("相对默认目标的偏差(rad):", error)
+                next_print = now + PRINT_PERIOD
+            if np.all(np.abs(error) <= STARTUP_TOLERANCE):
+                break
+            if now >= deadline:
+                raise TimeoutError("30 秒内未到达默认关节位置，停止进入 IK 控制")
+
+        initial_target_position = control.fk(q).translation.copy()
+        twin = DigitalTwin(q, initial_target_position)
+        print("已到达默认位置，开始小球 IK 控制")
 
         next_tick = time.perf_counter()
         next_print = next_tick
@@ -51,7 +74,8 @@ def main():
             next_tick += CONTROL_PERIOD
             time.sleep(max(0, next_tick - time.perf_counter()))
     finally:
-        twin.close()
+        if twin is not None:
+            twin.close()
         piper.close()
 
 
