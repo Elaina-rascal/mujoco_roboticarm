@@ -93,4 +93,20 @@ class Piper:
         return current_ma * 0.001 * k * b * c
 
     def close(self):
-        self.sdk.DisconnectPort()
+        """以当前位置作为普通位置模式目标，确认模式反馈后断开连接。"""
+        try:
+            if self.sdk.GetArmJointMsgs().time_stamp == 0:
+                raise RuntimeError("没有关节反馈，无法设置退出保持位置")
+            hold_positions = self.read_joint_positions()
+            deadline = time.monotonic() + 1.0
+            while time.monotonic() < deadline:
+                self.send_joint_positions(hold_positions, speed_percent=10)
+                time.sleep(0.02)
+                if self.sdk.GetArmStatus().arm_status.mode_feed == 0x01:
+                    print("\033[38;2;200;162;255m[Piper] 已切换到位置模式，保持当前位置\033[0m", flush=True)
+                    return
+            
+            raise TimeoutError("退出时未确认切换到位置模式；旧固件可能不支持直接从 MIT 切换")
+            
+        finally:
+            self.sdk.DisconnectPort()
