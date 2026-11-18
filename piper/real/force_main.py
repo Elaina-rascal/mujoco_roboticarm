@@ -1,6 +1,7 @@
 """运行：python3 piper/real/force_main.py，MIT 保持启动时当前位置并补偿重力。"""
 
 import time
+from pathlib import Path
 
 import numpy as np
 
@@ -12,17 +13,18 @@ from piper_arm import Piper
 CONTROL_PERIOD = 1 / 200  # s
 PRINT_PERIOD = 0.1  # s
 HOLD_POSITIONS = np.array([0.114214, 0.586248, -0.464362, 0.019862, 0.192911, -0.019862])
-KP = 1.0
+KP = 5.0
 KD = 0.01
+MODEL_PATH = Path(__file__).resolve().parents[1] / "sim" / "arm_official.xml"
 
 
 def main():
     piper = Piper(can_name="can_piper", mode="mit")
-    control = PinocchioControl()
+    control = PinocchioControl(model_path=MODEL_PATH)
     while piper.sdk.GetArmJointMsgs().time_stamp == 0:
         time.sleep(CONTROL_PERIOD)
     q = piper.read_joint_positions()
-    twin = DigitalTwin(q, control.fk(q).translation)
+    twin = DigitalTwin(q, control.fk(q).translation, model_path=MODEL_PATH)
     np.set_printoptions(precision=6, suppress=True)
 
     try:

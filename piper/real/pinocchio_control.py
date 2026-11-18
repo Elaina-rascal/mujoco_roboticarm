@@ -11,7 +11,8 @@ EE_TO_LEVEL = pin.rpy.rpyToMatrix(0.0, -np.pi / 2, 0.0) #type:ignore
 
 
 class PinocchioControl:
-    def __init__(self, damping=0.01):
+    def __init__(self, damping=0.01, model_path=MODEL_PATH):
+        self.model_path = Path(model_path).resolve()
         self.damping = damping
         self.min_singular_value = 1e-3
         self.max_task_error = 1e-3  # H 约束后的位姿误差，包含 m 和 rad。
@@ -19,7 +20,7 @@ class PinocchioControl:
         self.ee_to_level = EE_TO_LEVEL.copy()
         self.H = np.diag([1.0, 1.0, 1.0, 1.0, 1.0, 0.0])
         self.task_dimension = 5
-        full_model = pin.buildModelFromMJCF(str(MODEL_PATH))
+        full_model = pin.buildModelFromMJCF(str(self.model_path))
         fingers = [full_model.getJointId(name) for name in ("joint7", "joint8")]
         self.model = pin.buildReducedModel(full_model, fingers, pin.neutral(full_model)) #type:ignore
         self.data = self.model.createData()

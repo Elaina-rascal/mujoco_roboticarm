@@ -3,7 +3,10 @@
 import mujoco
 import numpy as np
 
-from position_simulation import ArmSimulation as PositionSimulation, vector
+try:
+    from .position_simulation import ArmSimulation as PositionSimulation, vector
+except ImportError:
+    from position_simulation import ArmSimulation as PositionSimulation, vector
 
 
 class ArmSimulation(PositionSimulation):

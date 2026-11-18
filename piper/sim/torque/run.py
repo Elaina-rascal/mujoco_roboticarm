@@ -2,8 +2,12 @@
 
 import time
 
-from controller import Controller
-from simulation import ArmSimulation
+try:
+    from .controller import Controller
+    from .simulation import ArmSimulation
+except ImportError:
+    from controller import Controller
+    from simulation import ArmSimulation
 
 
 GRIPPER_WIDTH = 0.04  # m，双指总开度。

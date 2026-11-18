@@ -30,12 +30,11 @@ def _draw_ee_frame(viewer, data, ee_id):
         viewer.user_scn.ngeom += 1
 
 
-def _run(joint_positions, target_position, stop):
+def _run(joint_positions, target_position, stop, model_path):
     import mujoco
     import mujoco.viewer
     import numpy as np
 
-    model_path = Path(__file__).resolve().parents[1] / "sim" / "arm.xml"
     model = mujoco.MjModel.from_xml_path(str(model_path))
     data = mujoco.MjData(model)
     q_ids = [model.joint(f"joint{i}").qposadr[0] for i in range(1, 7)]
@@ -71,14 +70,17 @@ def _run(joint_positions, target_position, stop):
 
 
 class DigitalTwin:
-    def __init__(self, q, target_position):
+    def __init__(self, q, target_position, model_path=None):
+        if model_path is None:
+            model_path = Path(__file__).resolve().parents[1] / "sim" / "arm.xml"
         context = get_context("spawn")
         self.joint_positions = context.Array("d", q)
         self.target_position = context.Array("d", target_position)
         self.stop = context.Event()
         self.process = context.Process(
             target=_run,
-            args=(self.joint_positions, self.target_position, self.stop),
+            args=(self.joint_positions, self.target_position, self.stop,
+                  str(Path(model_path).resolve())),
             name="piper-digital-twin",
         )
         self.process.start()
