@@ -12,10 +12,11 @@ piper/
 ├── sim/
 │   ├── position/              # run.py 和本场景的 controller.py
 │   ├── torque/                # run.py 和本场景的 controller.py
-│   └── Parameter_Estimate/    # 离线重力参数辨识
+│   └── estimate/    # 离线重力参数辨识
 └── real/
     ├── position/run.py
     ├── torque/run.py
+    ├── estimate/    # 真机轨迹和重力辨识数据采集
     └── digital_twin.py        # 真机反馈显示和目标球交互
 ```
 
@@ -24,11 +25,13 @@ piper/
 ```bash
 python3 -m piper.sim.position.run
 python3 -m piper.sim.torque.run
-python3 -m piper.sim.Parameter_Estimate.gravity_identification
+python3 -m piper.sim.estimate.gravity_identification
+python3 -m piper.sim.estimate.trajectory_demo
 
-# 以下两条会连接并控制真机，需要先配置 CAN 和安装 piper_sdk。
+# 以下命令会连接并控制真机，需要先配置 CAN 和安装 piper_sdk。
 python3 -m piper.real.position.run
 python3 -m piper.real.torque.run
+python3 -m piper.real.estimate.trajectory_demo
 ```
 
 仿真和控制器依赖 `numpy`、`mujoco`、支持 MJCF 的 `pin`；导入真机入口不连接硬件。

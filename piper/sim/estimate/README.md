@@ -1,9 +1,17 @@
 # 离线重力参数辨识
 
+仅播放辨识用的轨迹，不采集数据：
+
+```bash
+python3 -m piper.sim.estimate.trajectory_demo
+```
+
+从 home 出发，依次经过六个固定种子的随机姿态，再回到 home 循环。每段用五次多项式平滑移动 3 秒，到位后停留 2 秒，起止速度和加速度为零。`trajectory()` 返回目标角度、速度和加速度；demo 使用位置接口跟踪目标角度，绿球显示目标末端位置。这里演示的是重力辨识所需的“移动—静止”轨迹，不进行辨识、数据记录或可辨识性优化。
+
 在项目根目录直接运行，无命令行参数：
 
 ```bash
-python3 -m piper.sim.Parameter_Estimate.gravity_identification
+python3 -m piper.sim.estimate.gravity_identification
 ```
 
 依赖：`pin`、`mujoco`、`numpy`。
