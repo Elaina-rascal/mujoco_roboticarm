@@ -5,16 +5,16 @@ import re
 import time
 
 import numpy as np
-from piper_sdk import C_PiperInterface_V2
 
-KP = 10.0
-KD = 0.8
+from piper.interface.base import ArmInterface, vector
 
 
-class Piper:
+class PiperInterface(ArmInterface):
     def __init__(self, can_name="can_piper", mode="position"):
-        if mode not in ("position", "mit"):
-            raise ValueError('mode 需要为 "position" 或 "mit"')
+        from piper_sdk import C_PiperInterface_V2
+
+        if mode not in ("position", "torque"):
+            raise ValueError('mode 需要为 "position" 或 "torque"')
         self.sdk = C_PiperInterface_V2(can_name=can_name, judge_flag=True)
         self.sdk.ConnectPort()
         try:
@@ -42,21 +42,22 @@ class Piper:
 
     def send_joint_positions(self, positions, speed_percent=10):
         """发送六轴目标角（rad），速度为百分比。"""
-        targets = np.rint(np.rad2deg(positions) * 1000).astype(int)
+        targets = np.rint(np.rad2deg(vector(positions, 6)) * 1000).astype(int)
         self.sdk.MotionCtrl_2(0x01, 0x01, speed_percent, 0x00)
         self.sdk.JointCtrl(*targets.tolist())
 
-    def send_mit(self, positions,torques,kp=KP, kd=KD):
-        """发送六轴 MIT 指令：目标角 rad、PD 增益、前馈力矩 N·m，目标速度为零。"""
+    def send_joint_torques(self, torques, positions=None, kp=0.0, kd=0.0):
+        """MIT 发送六轴力矩；真机可额外传入目标角与 PD 增益，默认纯前馈。"""
         if self.firmware_version != "S-V1.5-8":
             raise NotImplementedError(f"MIT 换算仅适配 S-V1.5-8，当前为 {self.firmware_version}")
         # 旧固件 J1/J2/J4/J6 反号；保留当前 1.5-8 前馈除以 4 的换算。
         mit_sign = np.array([-1, -1, 1, -1, 1, -1])
         # 当前 SDK 的 MIT t_ref 编码范围为 [-8, 8]。
-        positions = np.asarray(positions) * mit_sign
-        targets = np.clip(np.asarray(torques) / 4.0, -8.0, 8.0) * mit_sign
-        kp = np.broadcast_to(kp, (6,))
-        kd = np.broadcast_to(kd, (6,))
+        positions = np.zeros(6) if positions is None else vector(positions, 6)
+        positions = positions * mit_sign
+        targets = np.clip(vector(torques, 6) / 4.0, -8.0, 8.0) * mit_sign
+        kp = vector(np.broadcast_to(kp, (6,)), 6)
+        kd = vector(np.broadcast_to(kd, (6,)), 6)
         self.sdk.MotionCtrl_2(0x01, 0x04, 0, 0xAD)
         for i in range(6):
             self.sdk.JointMitCtrl(
@@ -64,6 +65,13 @@ class Piper:
                 float(kp[i]), float(kd[i]), float(targets[i]),
             )
         self.last_mit_t_ref = targets.copy()
+
+    def enable(self):
+        """真机使能，返回 SDK 的使能结果。"""
+        return self.sdk.EnablePiper()
+
+    def has_feedback(self):
+        return self.sdk.GetArmJointMsgs().time_stamp != 0
 
     def read_joint_positions(self):
         """读取 SDK 缓存的 joint1～joint6 角度（rad）。"""
@@ -105,8 +113,8 @@ class Piper:
                 if self.sdk.GetArmStatus().arm_status.mode_feed == 0x01:
                     print("\033[38;2;200;162;255m[Piper] 已切换到位置模式，保持当前位置\033[0m", flush=True)
                     return
-            
+
             raise TimeoutError("退出时未确认切换到位置模式；旧固件可能不支持直接从 MIT 切换")
-            
+
         finally:
             self.sdk.DisconnectPort()

@@ -2,30 +2,29 @@
 
 import numpy as np
 import pinocchio as pin
-if __package__:
-    from .simulation import MODEL_PATH, vector
-else:
-    from simulation import MODEL_PATH, vector
+
+from piper.interface.base import vector
+from piper.models import OFFICIAL_MODEL
 
 # 在这里切换模式，不需要修改 run.py。
 CONSTRAINT_MODE = "h"  # "euler": roll/yaw 自由；"h": 仅世界系 yaw 自由。
 TARGET_PITCH = 0.0  # rad，夹爪参考系目标 pitch。
 
-class Controller:
+class PositionIKController:
     def __init__(self, damping=0.01, target_pitch=TARGET_PITCH, constraint_mode=None):
         """damping 为 DLS 的 λ，正规方程中的阻尼项为 λ²I。"""
         self.damping = float(damping)
         self.min_singular_value = 1e-3
         self.max_task_error = 1e-3  # H 约束后的位姿误差范数，包含 m 和 rad。
         self.max_joint_change = np.deg2rad(30)  # 初始 q 到最终 q 的单轴最大变化。
-        
+
         self.target_pitch = float(target_pitch)
-        
+
         self.constraint_mode = CONSTRAINT_MODE if constraint_mode is None else constraint_mode
-        
+
         self.target_rpy = np.array([0.0, self.target_pitch, 0.0])
         self.target_rotation = pin.rpy.rpyToMatrix(self.target_rpy)
-        full_model = pin.buildModelFromMJCF(str(MODEL_PATH))
+        full_model = pin.buildModelFromMJCF(str(OFFICIAL_MODEL))
         # 夹爪不参与 IK，锁定两个滑动关节，配置只保留六轴角度。
         finger_ids = [full_model.getJointId(name) for name in ("joint7", "joint8")]
         self.model = pin.buildReducedModel(full_model, finger_ids, pin.neutral(full_model)) #type:ignore

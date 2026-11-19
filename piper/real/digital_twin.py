@@ -5,7 +5,8 @@ from pathlib import Path
 import time
 
 
-from pinocchio_control import EE_TO_LEVEL
+from piper.controllers.pinocchio_control import EE_TO_LEVEL
+from piper.models import ARM_MODEL
 
 
 def _draw_ee_frame(viewer, data, ee_id):
@@ -70,9 +71,7 @@ def _run(joint_positions, target_position, stop, model_path):
 
 
 class DigitalTwin:
-    def __init__(self, q, target_position, model_path=None):
-        if model_path is None:
-            model_path = Path(__file__).resolve().parents[1] / "sim" / "arm.xml"
+    def __init__(self, q, target_position, model_path=ARM_MODEL):
         context = get_context("spawn")
         self.joint_positions = context.Array("d", q)
         self.target_position = context.Array("d", target_position)

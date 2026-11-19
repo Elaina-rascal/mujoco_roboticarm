@@ -2,16 +2,13 @@
 
 import pinocchio as pin
 
-try:
-    from .position_simulation import MODEL_PATH
-except ImportError:
-    from position_simulation import MODEL_PATH
+from piper.models import OFFICIAL_MODEL
 
 
-class Controller:
+class GravityController:
     def __init__(self):
         # 保留夹爪关节，按当前开度计算完整机械臂的重力。
-        self.model = pin.buildModelFromMJCF(str(MODEL_PATH))
+        self.model = pin.buildModelFromMJCF(str(OFFICIAL_MODEL))
         self.data = self.model.createData()
         self.v_ids = [
             self.model.joints[self.model.getJointId(f"joint{i}")].idx_v

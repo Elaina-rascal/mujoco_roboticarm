@@ -1,6 +1,6 @@
 # 官方 PiPER 动力学模型（仿真）
 
-`../../arm_official.xml` 使用以下官方参数，独立于原来的 `../../arm.xml`。
+`../arm_official.xml` 使用以下官方参数，独立于原来的 `../arm.xml`。
 
 - 六轴： https://github.com/agilexrobotics/agilex-arm-gravity-compensation/blob/8e2545c00ec9ec7590414946ab5f913274c7b643/piper/piper/urdf/piper_description.urdf
 - 夹爪及双指： https://github.com/agilexrobotics/piper_ros/blob/humble/src/piper_description/urdf/piper_description.urdf （2026-11-18 获取）
@@ -31,5 +31,5 @@ python3 -m piper.sim.position.run
 python3 -m piper.sim.torque.run
 ```
 
-`force_main` 的动力学及数字孪生、位置和力矩仿真使用 `arm_official.xml`；
-`fk_main` 默认仍使用原 `arm.xml`。
+`piper.real.torque.run` 的动力学及数字孪生、位置和力矩仿真使用 `arm_official.xml`；
+`piper.real.position.run` 默认仍使用原 `arm.xml`。

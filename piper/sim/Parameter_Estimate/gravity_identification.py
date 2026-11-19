@@ -1,13 +1,11 @@
 """随机修改 link2 的质量，用静态重力力矩离线辨识，再对比结果。"""
 
-from pathlib import Path
-
 import mujoco
 import numpy as np
 import pinocchio as pin
 
 
-MODEL_PATH = Path(__file__).resolve().parents[1] / "arm_official.xml"
+from piper.models import OFFICIAL_MODEL
 
 
 def set_mass(model, joint_id, mass):
@@ -20,7 +18,7 @@ def set_mass(model, joint_id, mass):
 
 def collect_data(model, rng):
     """MuJoCo 采集 300 组静态姿态和六轴重力力矩，夹爪保持半开。"""
-    mj_model = mujoco.MjModel.from_xml_path(str(MODEL_PATH))
+    mj_model = mujoco.MjModel.from_xml_path(str(OFFICIAL_MODEL))
     mj_data = mujoco.MjData(mj_model)
     mj_model.body_gravcomp[:] = 0
     positions = np.tile(pin.neutral(model), (300, 1))
@@ -84,7 +82,7 @@ def identify_mass(model, joint_id, positions, measured_torques):
 
 def main():
     rng = np.random.default_rng(42)
-    original = pin.buildModelFromMJCF(str(MODEL_PATH))
+    original = pin.buildModelFromMJCF(str(OFFICIAL_MODEL))
     joint_id = original.getJointId("joint2")
     original_mass = original.inertias[joint_id].mass
 

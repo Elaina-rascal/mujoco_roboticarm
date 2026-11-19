@@ -1,13 +1,12 @@
-"""运行：python3 piper/real/force_main.py，MIT 保持启动时当前位置并补偿重力。"""
+"""运行：python3 -m piper.real.torque.run，MIT 位置保持并补偿重力。"""
 
 import time
-from pathlib import Path
-
 import numpy as np
 
-from digital_twin import DigitalTwin
-from pinocchio_control import PinocchioControl
-from piper_arm import Piper
+from piper.controllers.pinocchio_control import PinocchioControl
+from piper.interface.piper import PiperInterface
+from piper.models import OFFICIAL_MODEL
+from piper.real.digital_twin import DigitalTwin
 
 
 CONTROL_PERIOD = 1 / 200  # s
@@ -15,25 +14,23 @@ PRINT_PERIOD = 0.1  # s
 HOLD_POSITIONS = np.array([0.114214, 0.586248, -0.464362, 0.019862, 0.192911, -0.019862])
 KP = 5.0
 KD = 0.01
-MODEL_PATH = Path(__file__).resolve().parents[1] / "sim" / "arm_official.xml"
 
 
 def main():
-    piper = Piper(can_name="can_piper", mode="mit")
-    control = PinocchioControl(model_path=MODEL_PATH)
-    while piper.sdk.GetArmJointMsgs().time_stamp == 0:
+    piper = PiperInterface(can_name="can_piper", mode="torque")
+    control = PinocchioControl(model_path=OFFICIAL_MODEL)
+    while not piper.has_feedback():
         time.sleep(CONTROL_PERIOD)
     q = piper.read_joint_positions()
-    twin = DigitalTwin(q, control.fk(q).translation, model_path=MODEL_PATH)
+    twin = DigitalTwin(q, control.fk(q).translation, model_path=OFFICIAL_MODEL)
     np.set_printoptions(precision=6, suppress=True)
 
     try:
-        while not piper.sdk.EnablePiper():
+        while not piper.enable():
             time.sleep(0.01)
 
-        # 使能后读取当前姿态，后续固定保持该目标。
-        hold_positions = piper.read_joint_positions().copy()
-        print("保持目标(rad):", hold_positions)
+        # 沿用原入口的固定保持目标与 PD 增益。
+        print("保持目标(rad):", HOLD_POSITIONS)
         print("力矩反馈为电流估算幅值；包含 PD 输出，幅值差不等于力矩跟踪误差。")
         next_tick = time.perf_counter()
         next_print = next_tick
@@ -41,8 +38,8 @@ def main():
             q = piper.read_joint_positions()
             now = time.perf_counter()
             gravity_torque = control.gravity(q)
-            # gravity() 返回输出端 N·m；缩放与方向补偿由 Piper 统一处理。
-            piper.send_mit(HOLD_POSITIONS, kp=KP, kd=KD, torques=gravity_torque)
+            # gravity() 返回输出端 N·m；缩放与方向补偿由真机接口处理。
+            piper.send_joint_torques(gravity_torque, positions=HOLD_POSITIONS, kp=KP, kd=KD)
             twin.update(q)
 
             if now >= next_print:

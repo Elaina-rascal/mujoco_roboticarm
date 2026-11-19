@@ -1,6 +1,6 @@
-<!-- Adapted from MuJoCo Menagerie agilex_piper; see models/agilex_piper/SOURCE.md and LICENSE. -->
+<!-- Adapted from MuJoCo Menagerie agilex_piper; see agilex_piper/SOURCE.md and LICENSE. -->
 <mujoco model="piper_ik_demo">
-  <compiler angle="radian" meshdir="models/agilex_piper/assets" />
+  <compiler angle="radian" meshdir="agilex_piper/assets" />
   <option integrator="implicitfast" cone="elliptic" impratio="10" timestep="0.002">
     <flag contact="disable" />
   </option>

@@ -2,12 +2,8 @@
 
 import time
 
-try:
-    from .controller import Controller
-    from .simulation import ArmSimulation
-except ImportError:
-    from controller import Controller
-    from simulation import ArmSimulation
+from piper.sim.torque.controller import GravityController
+from piper.interface.mujoco import MujocoInterface
 
 
 GRIPPER_WIDTH = 0.04  # m，双指总开度。
@@ -17,11 +13,11 @@ STEPS_PER_CONTROL = 5  # 物理 0.002 s，控制 0.01 s。
 def main():
     import mujoco.viewer
 
-    sim = ArmSimulation()
+    sim = MujocoInterface(mode="torque")
     _, _, ee_position, _ = sim.state()
     sim.set_target(ee_position)
     sim.set_gripper(GRIPPER_WIDTH)
-    controller = Controller()
+    controller = GravityController()
     print("PiPER 六轴 Pinocchio 纯重力补偿：tau = g(q)，无位置保持、无速度阻尼。")
     print("可在 MuJoCo 窗口中双击选中机械臂，按 Ctrl + 鼠标右键施加扰动力。")
     try:
@@ -33,7 +29,7 @@ def main():
             start = time.monotonic()
             while viewer.is_running():
                 torque = controller.compute(sim.data.qpos)
-                sim.set_command(torque)
+                sim.send_joint_torques(torque)
                 sim.step(STEPS_PER_CONTROL)
                 sim.draw_ee_frames(viewer)
                 viewer.sync()

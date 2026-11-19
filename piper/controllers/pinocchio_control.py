@@ -5,13 +5,13 @@ from pathlib import Path
 import numpy as np
 import pinocchio as pin
 
+from piper.models import ARM_MODEL
 
-MODEL_PATH = Path(__file__).resolve().parents[1] / "sim" / "arm.xml"
 EE_TO_LEVEL = pin.rpy.rpyToMatrix(0.0, -np.pi / 2, 0.0) #type:ignore
 
 
 class PinocchioControl:
-    def __init__(self, damping=0.01, model_path=MODEL_PATH):
+    def __init__(self, damping=0.01, model_path=ARM_MODEL):
         self.model_path = Path(model_path).resolve()
         self.damping = damping
         self.min_singular_value = 1e-3
