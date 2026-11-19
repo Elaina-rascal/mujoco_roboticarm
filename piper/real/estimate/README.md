@@ -1,5 +1,25 @@
 # 真机重力辨识数据采集
 
+用已采集的 `data/gravity.npz` 做 Y 矩阵参数更新并打印前后变化：
+
+```bash
+python3 -m piper.real.estimate.gravity_estimator
+```
+
+`GravityEstimator` 使用 `Y(q, 0, 0)`，只更新各连杆的 `m、m*cx、m*cy、m*cz`，不辨识转动惯量。求解 `Y*delta = tau - Y*原参数`，再加上修正量；最小范数解保留不可辨识方向的原值。打印回归秩、更新前后参数、变化量及拟合 RMSE。质量单位 kg，一阶质量矩单位 kg·m。
+
+重力数据只能确定部分参数组合，所以结果是等效重力参数，不能当作唯一的真实质量与质心；不保证物理惯性的可行性。更新值保存在类的 `parameters` 中，`gravity(q)` 使用这些参数计算重力，不修改原 XML 或 Pinocchio 模型的惯性。夹爪按现有真机控制器固定为模型中性姿态，采样时应保持相应开度与负载。数据需使用与模型一致的**有符号**关节力矩，代码不猜测反馈符号。
+
+```python
+import numpy as np
+
+from piper.real.estimate.gravity_estimator import GravityEstimator
+
+with np.load("piper/real/estimate/data/gravity.npz") as data:
+    estimator = GravityEstimator().fit(data["q"], data["tau"])
+    gravity_torque = estimator.gravity(data["q"][0])
+```
+
 在项目根目录运行：
 
 ```bash
