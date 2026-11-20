@@ -31,3 +31,13 @@ tau = g(q) + J_xyz.T @ F
 没有额外的关节 MIT PD，VMC 入口的 MIT kp/kd 为零。速度来自实际关节角按实际时间间隔差分，经过 10 Hz 一阶低通，再通过雅可比换算为末端速度。
 
 `[20, 20, 20] N` 可同时输出，不按合力模长缩放。这是计算的空间力指令限幅，不是测量的接触力上限；关节指令还包含重力补偿，并受接口力矩饱和限制。控制和显示使用同一份 `arm_official.xml`，夹爪按模型中性姿态固定。
+
+
+诊断时分别运行（前一个退出后再运行下一个）：
+
+```bash
+python3 -m piper.real.force.mit --diagnostics /tmp/piper-pd.jsonl
+python3 -m piper.real.force.vmc --diagnostics /tmp/piper-vmc.jsonl
+```
+
+日志追加保存计算力矩、SDK 实参（含目标角、kp/kd、t_ref）、原始电流及其同副本换算值、控制模式和 SDK 时间戳。记录频率沿用各入口的打印频率，不改变控制律。SDK 参数记录不代表 CAN 线上编码值或驱动器接收确认；各类反馈来自异步缓存，应先比较稳定片段，不把当前指令与刚读到的反馈视为严格同步的一对。

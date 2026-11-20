@@ -9,6 +9,7 @@ import pinocchio as pin
 from piper.interface.piper import PiperInterface
 from piper.models import OFFICIAL_MODEL
 from piper.real.digital_twin import DigitalTwin
+from piper.real.force.diagnostics import diagnostic_path, record_torques
 from piper.controllers.pinocchio_controller import PinocchioControl
 from piper.interface.base import vector
 
@@ -31,6 +32,7 @@ class ImpedanceCommand:
     position: np.ndarray
     velocity: np.ndarray
     gravity: np.ndarray
+    force_torque: np.ndarray
 
 
 def compute_impedance(control, q, dq, target):
@@ -44,8 +46,9 @@ def compute_impedance(control, q, dq, target):
     velocity = jacobian @ dq
     force = np.clip(KP * (target - position) - KD * velocity, -MAX_FORCE, MAX_FORCE)
     gravity = control.gravity(q)
-    torque = control.force_to_torque(q, force) + gravity
-    return ImpedanceCommand(torque, force, position, velocity, gravity)
+    force_torque = control.force_to_torque(q, force)
+    torque = force_torque + gravity
+    return ImpedanceCommand(torque, force, position, velocity, gravity,force_torque)
 
 
 STARTUP_TIMEOUT = 30.0
@@ -60,11 +63,7 @@ def move_to_initial_pose(piper, control):
             raise TimeoutError("等待真机关节反馈超时")
         time.sleep(CONTROL_PERIOD)
     q = piper.read_joint_positions()
-    target = control.ik(q, INITIAL_POSITION)
-    pose = control.fk(target)
-    error = control.H @ np.r_[INITIAL_POSITION - pose.translation, -pin.log3(pose.rotation)]
-    if np.linalg.norm(error) > control.max_task_error:
-        raise ValueError("初始位置 IK 未通过检查，未发送运动指令")
+    target = control.ik(q, INITIAL_POSITION,check=False)
     deadline = time.monotonic() + STARTUP_TIMEOUT
     while True:
         # 就位完成前一直使用普通位置模式，不施加空间弹簧力。
@@ -79,6 +78,7 @@ def move_to_initial_pose(piper, control):
 
 
 def main():
+    log_path = diagnostic_path()
     control = PinocchioControl(model_path=OFFICIAL_MODEL)
     piper = PiperInterface(can_name="can_piper", mode="position")
     twin = None
@@ -96,6 +96,7 @@ def main():
         print("双击目标球，Ctrl + 鼠标右键拖动；关闭窗口或 Ctrl+C 退出并保持当前位置。")
         while twin.process.is_alive() and not twin.stop.is_set():
             q = piper.read_joint_positions()
+            feedback_torque = piper.read_joint_torques()
             now = time.perf_counter()
             elapsed = now - previous_time
             if elapsed > 0:
@@ -109,11 +110,15 @@ def main():
             piper.send_joint_torques(command.torque, kp=0.0, kd=0.0)
             twin.update(q)
             if now >= next_print:
+                record_torques(log_path, piper, q, command.gravity, command.force_torque)
                 print("目标 XYZ(m):", np.asarray(target))
                 print("实际 XYZ(m):", command.position)
-                print("末端速度(m/s):", command.velocity)
+                print("重力力矩:",command.gravity)
+                print("阻抗力矩:", command.force_torque)
+                print("总力矩居:", command.torque)
+                print("反馈力矩:", feedback_torque)
                 print("阻抗指令 Fx/Fy/Fz(N，逐轴限幅):", command.force)
-                print("关节指令(N·m，含重力):", command.torque)
+                # print("关节指令(N·m，含重力):", command.torque)
                 next_print = now + PRINT_PERIOD
             next_tick += CONTROL_PERIOD
             delay = next_tick - time.perf_counter()

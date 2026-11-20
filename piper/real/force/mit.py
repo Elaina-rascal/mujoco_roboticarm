@@ -2,12 +2,13 @@
 
 import time
 import numpy as np
-
+import pinocchio as pin
 from piper.controllers.pinocchio_controller import PinocchioControl
 from piper.interface.piper import PiperInterface
 from piper.models import OFFICIAL_MODEL
 from piper.real.digital_twin import DigitalTwin
-from piper.real.force.vmc import INITIAL_POSITION, move_to_initial_pose
+from piper.real.force.diagnostics import diagnostic_path, record_torques
+
 
 
 CONTROL_PERIOD = 1 / 200  # s
@@ -16,7 +17,31 @@ KP = 5.0
 KD = 0.01
 
 
+STARTUP_TIMEOUT = 30.0
+STARTUP_TOLERANCE = 0.02  # rad
+INITIAL_POSITION = np.array([0.249335, 0.0308932, 0.266156])
+def move_to_initial_pose(piper, control):
+    """调用现有 IK，以 10% 位置速度就位；工具水平，yaw 自由。"""
+    deadline = time.monotonic() + STARTUP_TIMEOUT
+    while not piper.has_feedback():
+        if time.monotonic() >= deadline:
+            raise TimeoutError("等待真机关节反馈超时")
+        time.sleep(CONTROL_PERIOD)
+    q = piper.read_joint_positions()
+    target = control.ik(q, INITIAL_POSITION,check=False)
+    deadline = time.monotonic() + STARTUP_TIMEOUT
+    while True:
+        # 就位完成前一直使用普通位置模式，不施加空间弹簧力。
+        piper.send_joint_positions(target, speed_percent=10)
+        enabled = piper.enable()
+        q = piper.read_joint_positions()
+        if enabled and np.all(np.abs(q - target) <= STARTUP_TOLERANCE):
+            return target
+        if time.monotonic() >= deadline:
+            raise TimeoutError("30 秒内未到达初始末端位姿，停止进入力控制")
+        time.sleep(CONTROL_PERIOD)
 def main():
+    log_path = diagnostic_path()
     control = PinocchioControl(model_path=OFFICIAL_MODEL)
     piper = PiperInterface(can_name="can_piper", mode="position")
     twin = None
@@ -39,6 +64,7 @@ def main():
             twin.update(q)
 
             if now >= next_print:
+                record_torques(log_path, piper, q, gravity_torque)
                 feedback_torque = piper.read_joint_torques()
                 feedforward_magnitude = np.abs(gravity_torque)
                 print("关节角(rad):", q)

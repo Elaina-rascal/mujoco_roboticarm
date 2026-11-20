@@ -55,7 +55,7 @@ class PinocchioControl:
         )[:3, :]
         return (jacobian.T @ force).copy()
 
-    def ik(self, joint_positions, target_position):
+    def ik(self, joint_positions, target_position,check=True):
         """求目标位置的六轴角度；工具保持水平，世界 yaw 自由，失败则返回初始 q。"""
         q_initial = np.asarray(joint_positions, dtype=float).copy()
         q_target = q_initial.copy()
@@ -74,8 +74,8 @@ class PinocchioControl:
             jac = self.H @ error_rate_map @ jac_lwa
             u, singular_values, vt = np.linalg.svd(jac, full_matrices=False)
 
-            if iteration == 100 or np.linalg.norm(error) <= self.max_task_error:
-                if self.check(singular_values, error, q_initial, q_target):
+            if iteration == 100 or np.linalg.norm(error) <= self.max_task_error :
+                if self.check(singular_values, error, q_initial, q_target) or not check:
                     return q_target
                 return q_initial
 

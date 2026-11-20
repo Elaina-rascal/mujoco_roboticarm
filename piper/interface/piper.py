@@ -58,6 +58,7 @@ class PiperInterface(ArmInterface):
         targets = np.clip(vector(torques, 6) / 4.0, -8.0, 8.0) * mit_sign
         kp = vector(np.broadcast_to(kp, (6,)), 6)
         kd = vector(np.broadcast_to(kd, (6,)), 6)
+        send_started_ns = time.monotonic_ns()
         self.sdk.MotionCtrl_2(0x01, 0x04, 0, 0xAD)
         for i in range(6):
             self.sdk.JointMitCtrl(
@@ -65,6 +66,14 @@ class PiperInterface(ArmInterface):
                 float(kp[i]), float(kd[i]), float(targets[i]),
             )
         self.last_mit_t_ref = targets.copy()
+        # SDK 调用参数，不代表 CAN 接收确认，也不包含编码量化。
+        self.last_mit_command = {
+            "send_started_ns": send_started_ns,
+            "send_finished_ns": time.monotonic_ns(),
+            "requested_torque_nm": vector(torques, 6).tolist(),
+            "p_ref_rad": positions.tolist(), "v_ref_rad_s": [0.0] * 6,
+            "kp": kp.tolist(), "kd": kd.tolist(), "t_ref": targets.tolist(),
+        }
 
     def enable(self):
         """真机使能，返回 SDK 的使能结果。"""
@@ -80,11 +89,11 @@ class PiperInterface(ArmInterface):
         return np.deg2rad(np.array(angles) * 0.001)
 
     def read_joint_torques(self):
-        """标准版六轴电流估算力矩（N·m），保留 SDK 符号；缺失轴为 NaN。
+        """六轴电流估算力矩；与诊断使用同一读取、同一换算，不代表外力矩。"""
+        return np.asarray(self.read_joint_torque_sample()["torque_nm"])
 
-        仅适配 S-V1.5-8。沿用现行官方 k*b*c 系数，尚未做真机负载
-        和方向标定；不使用旧 SDK effort，也不套用 MIT 发送反号。
-        """
+    def read_joint_torque_sample(self):
+        """同一 SDK 缓存副本中的原始电流和换算力矩；各轴并非同步采样。"""
         if self.firmware_version != "S-V1.5-8":
             raise NotImplementedError(f"力矩反馈换算仅适配 S-V1.5-8，当前为 {self.firmware_version}")
         feedback = deepcopy(self.sdk.GetArmHighSpdInfoMsgs())
@@ -98,7 +107,11 @@ class PiperInterface(ArmInterface):
         k = np.array([1.18125, 1.18125, 1.18125, 0.9576, 0.9576, 0.9576])
         b = np.array([4., 4., 4., 1., 1., 1.])
         c = np.array([1., 1., 1., 0.813252, 0.813252, 0.813252])
-        return current_ma * 0.001 * k * b * c
+        return {
+            "current_ma": current_ma.tolist(),
+            "torque_nm": (current_ma * 0.001 * k * b * c).tolist(),
+            "sdk_timestamp": getattr(feedback, "time_stamp", None),
+        }
 
     def close(self):
         """以当前位置作为普通位置模式目标，确认模式反馈后断开连接。"""
