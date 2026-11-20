@@ -1,13 +1,13 @@
-"""运行：python3 piper/real/fk_main.py，拖动数字孪生小球进行实机 IK 控制。"""
+"""运行：python3 -m piper.real.position.run，拖动数字孪生小球进行实机 IK 控制。"""
 
 import time
 
 import numpy as np
 import pinocchio as pin
 
-from pinocchio_control import PinocchioControl
-from piper_arm import Piper
-from digital_twin import DigitalTwin
+from piper.controllers.pinocchio_controller import PinocchioControl
+from piper.interface.piper_new import PiperInterface
+from piper.real.digital_twin import DigitalTwin
 
 
 CONTROL_PERIOD = 1 / 200  # s
@@ -18,16 +18,16 @@ STARTUP_TOLERANCE = 0.02  # rad
 
 
 def main():
-    piper = Piper(can_name="can_piper", mode="position")
+    piper = PiperInterface(can_name="can_piper", mode="position")
     control = PinocchioControl()
     # 等到首帧真实反馈，再确定目标球起点。
-    while piper.sdk.GetArmJointMsgs().time_stamp == 0:
+    while not piper.has_feedback():
         time.sleep(CONTROL_PERIOD)
     q = piper.read_joint_positions()
     twin = None
     np.set_printoptions(precision=6, suppress=True)
     try:
-        while not piper.sdk.EnablePiper():
+        while not piper.enable():
             time.sleep(0.01)
 
         print("普通位置模式，上电默认目标(rad):", HOLD_POSITIONS)

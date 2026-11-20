@@ -1,5 +1,7 @@
 # mujoco_roboticarm
 
+PiPER 的目录、统一接口和运行方式见 [piper/README.md](piper/README.md)。
+
 UR5e 机械臂 MuJoCo 仿真，通过 Python 函数直接设置关节位置或力矩、读取状态，支持 Pinocchio 逆运动学。无需 ROS 2、功能包构建或 launch。
 
 ## 安装

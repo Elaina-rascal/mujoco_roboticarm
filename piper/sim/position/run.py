@@ -1,13 +1,9 @@
-"""直接运行：python3 piper/sim/position/run.py。"""
+"""项目根目录运行：python3 -m piper.sim.position.run。"""
 
 import time
 
-try:
-    from .controller import Controller
-    from .simulation import ArmSimulation
-except ImportError:
-    from controller import Controller
-    from simulation import ArmSimulation
+from piper.sim.position.controller import PositionIKController
+from piper.interface.mujoco import MujocoInterface
 
 
 GRIPPER_WIDTH = 0.04  # m，双指总开度。
@@ -17,13 +13,13 @@ STEPS_PER_CONTROL = 5  # 物理 0.002 s，控制 0.01 s。
 def main():
     import mujoco.viewer
 
-    sim = ArmSimulation()
+    sim = MujocoInterface(mode="position")
     _, _, ee_position, _ = sim.state()
     sim.set_target(ee_position)
     sim.set_gripper(GRIPPER_WIDTH)
-    controller = Controller()
+    controller = PositionIKController()
     dt = float(sim.model.opt.timestep) * STEPS_PER_CONTROL
-    print("PiPER 夹爪 IK：约束模式和目标 pitch 在 controller.py 中配置，绿球为位置目标。")
+    print("PiPER 夹爪 IK：约束模式和目标 pitch 在 sim/position/controller.py 中配置，绿球为位置目标。")
     print("末端仅显示 body 坐标轴：红X、绿Y、蓝Z，轴长 18 cm，随夹爪旋转。")
     print("双击绿球，按住 Ctrl + 鼠标右键拖动；关闭窗口或 Ctrl+C 退出。")
     try:
@@ -37,7 +33,7 @@ def main():
                 q, dq, position, target = sim.state()
                 command = controller.compute(q, dq, position, target, dt)
                 if command is not None:
-                    sim.set_command(command)
+                    sim.send_joint_positions(command)
                 sim.step(STEPS_PER_CONTROL)
                 sim.draw_ee_frames(viewer)
                 viewer.sync()
