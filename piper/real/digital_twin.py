@@ -5,7 +5,7 @@ from pathlib import Path
 import time
 
 
-from piper.controllers.pinocchio_control import EE_TO_LEVEL
+from piper.controllers.pinocchio_controller import EE_TO_LEVEL
 from piper.models import ARM_MODEL
 
 

@@ -31,5 +31,5 @@ python3 -m piper.sim.position.run
 python3 -m piper.sim.torque.run
 ```
 
-`piper.real.torque.run` 的动力学及数字孪生、位置和力矩仿真使用 `arm_official.xml`；
+`piper.real.force.mit`、`piper.real.force.vmc` 的动力学及数字孪生、位置和力矩仿真使用 `arm_official.xml`；
 `piper.real.position.run` 默认仍使用原 `arm.xml`。

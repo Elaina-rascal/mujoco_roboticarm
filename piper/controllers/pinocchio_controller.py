@@ -1,4 +1,4 @@
-"""Piper FK / IK：位置与工具姿态约束，仅世界系 yaw 自由。"""
+"""Piper FK / IK、重力补偿和 VMC 空间力到关节力矩映射。"""
 
 from pathlib import Path
 
@@ -6,6 +6,7 @@ import numpy as np
 import pinocchio as pin
 
 from piper.models import ARM_MODEL
+from piper.interface.base import vector
 
 EE_TO_LEVEL = pin.rpy.rpyToMatrix(0.0, -np.pi / 2, 0.0) #type:ignore
 
@@ -43,6 +44,16 @@ class PinocchioControl:
         """返回六轴重力补偿力矩（N·m）；夹爪沿用六轴模型中的固定姿态。"""
         q = np.asarray(joint_positions, dtype=float)
         return pin.computeGeneralizedGravity(self.model, self.data, q).copy()
+
+    def force_to_torque(self, joint_positions, force):
+        """世界系末端 XYZ 力（N）→ 六轴 VMC 力矩（N·m），不含重力。"""
+        q = vector(joint_positions, 6)
+        force = vector(force, 3)
+        jacobian = pin.computeFrameJacobian(
+            self.model, self.data, q, self.ee_id,
+            pin.ReferenceFrame.LOCAL_WORLD_ALIGNED,
+        )[:3, :]
+        return (jacobian.T @ force).copy()
 
     def ik(self, joint_positions, target_position):
         """求目标位置的六轴角度；工具保持水平，世界 yaw 自由，失败则返回初始 q。"""
@@ -106,3 +117,8 @@ class PinocchioControl:
             )
             return False
         return True
+if __name__ == "__main__":
+    HOLD_POSITIONS = np.array([0.114214, 0.586248, -0.464362, 0.019862, 0.192911, -0.019862])
+    control = PinocchioControl()
+    pose = control.fk(HOLD_POSITIONS)
+    print("末端位姿：\n", pose)

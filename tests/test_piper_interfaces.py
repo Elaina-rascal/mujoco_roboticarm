@@ -9,7 +9,7 @@ import mujoco
 import numpy as np
 
 from piper.sim.torque.controller import GravityController
-from piper.controllers.pinocchio_control import PinocchioControl
+from piper.controllers.pinocchio_controller import PinocchioControl
 from piper.interface.base import ArmInterface
 from piper.interface.mujoco import MujocoInterface
 from piper.interface.piper import PiperInterface
@@ -60,7 +60,8 @@ class PiperInterfaceTests(unittest.TestCase):
             control = PinocchioControl(model_path=path)
             self.assertEqual(control.gravity(np.zeros(6)).shape, (6,))
         for module in ("piper.sim.position.run", "piper.sim.torque.run",
-                       "piper.real.position.run", "piper.real.torque.run",
+                       "piper.real.position.run", "piper.real.force.mit",
+                       "piper.real.force.vmc",
                        "piper.real.digital_twin"):
             importlib.import_module(module)
 
