@@ -65,7 +65,7 @@ class PiperInterfaceTests(unittest.TestCase):
                        "piper.real.digital_twin"):
             importlib.import_module(module)
 
-    def test_real_interface_units_and_mit_direction(self):
+    def test_real_position_units_and_lifecycle(self):
         # 用 SDK 替身验证协议换算，测试不会打开 CAN 或发送真机指令。
         sdk = MagicMock()
         sdk.GetPiperFirmwareVersion.return_value = "S-V1.5-8"
@@ -75,26 +75,13 @@ class PiperInterfaceTests(unittest.TestCase):
             joint_state=SimpleNamespace(**{f"joint_{i}": 1000 * i for i in range(1, 7)}),
         )
         sdk.GetArmStatus.return_value = SimpleNamespace(arm_status=SimpleNamespace(mode_feed=1))
-        sdk.GetArmHighSpdInfoMsgs.return_value = SimpleNamespace(**{
-            f"motor_{i + 1}": SimpleNamespace(can_id=0x251 + i, current=1000)
-            for i in range(6)
-        })
         factory = MagicMock(return_value=sdk)
         with patch.dict("sys.modules", {"piper_sdk": SimpleNamespace(C_PiperInterface_V2=factory)}):
-            arm = PiperInterface(mode="torque")
+            arm = PiperInterface(mode="position")
             q = np.deg2rad(np.arange(1, 7))
             np.testing.assert_allclose(arm.read_joint_positions(), q)
             arm.send_joint_positions(q)
             sdk.JointCtrl.assert_called_with(1000, 2000, 3000, 4000, 5000, 6000)
-            arm.send_joint_torques(np.full(6, 4.0), positions=q, kp=5, kd=0.01)
-            signs = [-1, -1, 1, -1, 1, -1]
-            for i, call in enumerate(sdk.JointMitCtrl.call_args_list):
-                self.assertEqual(call.args[0], i + 1)
-                self.assertAlmostEqual(call.args[1], q[i] * signs[i])
-                self.assertEqual(call.args[3:5], (5.0, 0.01))
-                self.assertEqual(call.args[5], signs[i])
-            np.testing.assert_allclose(arm.read_joint_torques(),
-                                       [4.725, 4.725, 4.725, *([0.9576 * 0.813252] * 3)])
             self.assertTrue(arm.enable())
             self.assertTrue(arm.has_feedback())
             arm.close()

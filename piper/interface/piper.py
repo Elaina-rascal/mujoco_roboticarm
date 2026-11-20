@@ -50,7 +50,8 @@ class PiperInterface(ArmInterface):
         """MIT 发送六轴力矩；真机可额外传入目标角与 PD 增益，默认纯前馈。"""
         if self.firmware_version != "S-V1.5-8":
             raise NotImplementedError(f"MIT 换算仅适配 S-V1.5-8，当前为 {self.firmware_version}")
-        # 旧固件 J1/J2/J4/J6 反号；保留当前 1.5-8 前馈除以 4 的换算。
+        # 旧固件 J1/J2/J4/J6 反号；/4 是历史实现，不是通用标定结论。
+        # 调查记录见 piper/real/force/TORQUE_FEEDFORWARD.md。
         mit_sign = np.array([-1, -1, 1, -1, 1, -1])
         # 当前 SDK 的 MIT t_ref 编码范围为 [-8, 8]。
         positions = np.zeros(6) if positions is None else vector(positions, 6)
@@ -58,22 +59,12 @@ class PiperInterface(ArmInterface):
         targets = np.clip(vector(torques, 6) / 4.0, -8.0, 8.0) * mit_sign
         kp = vector(np.broadcast_to(kp, (6,)), 6)
         kd = vector(np.broadcast_to(kd, (6,)), 6)
-        send_started_ns = time.monotonic_ns()
         self.sdk.MotionCtrl_2(0x01, 0x04, 0, 0xAD)
         for i in range(6):
             self.sdk.JointMitCtrl(
                 i + 1, float(positions[i]), 0.0,
                 float(kp[i]), float(kd[i]), float(targets[i]),
             )
-        self.last_mit_t_ref = targets.copy()
-        # SDK 调用参数，不代表 CAN 接收确认，也不包含编码量化。
-        self.last_mit_command = {
-            "send_started_ns": send_started_ns,
-            "send_finished_ns": time.monotonic_ns(),
-            "requested_torque_nm": vector(torques, 6).tolist(),
-            "p_ref_rad": positions.tolist(), "v_ref_rad_s": [0.0] * 6,
-            "kp": kp.tolist(), "kd": kd.tolist(), "t_ref": targets.tolist(),
-        }
 
     def enable(self):
         """真机使能，返回 SDK 的使能结果。"""

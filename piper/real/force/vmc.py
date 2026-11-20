@@ -6,10 +6,9 @@ import time
 import numpy as np
 import pinocchio as pin
 
-from piper.interface.piper import PiperInterface
+from piper.interface.piper_new import PiperInterface
 from piper.models import OFFICIAL_MODEL
 from piper.real.digital_twin import DigitalTwin
-from piper.real.force.diagnostics import diagnostic_path, record_torques
 from piper.controllers.pinocchio_controller import PinocchioControl
 from piper.interface.base import vector
 
@@ -78,7 +77,6 @@ def move_to_initial_pose(piper, control):
 
 
 def main():
-    log_path = diagnostic_path()
     control = PinocchioControl(model_path=OFFICIAL_MODEL)
     piper = PiperInterface(can_name="can_piper", mode="position")
     twin = None
@@ -107,10 +105,9 @@ def main():
             target = twin.read_target_position()
             command = compute_impedance(control, q, dq, target)
             # 弹簧和阻尼已在 XYZ 空间实现，不再叠加关节 MIT PD 锁住姿态。
-            piper.send_joint_torques(command.torque, kp=0.0, kd=0.0)
+            piper.send_joint_torques(command.torque, kp=0.1, kd=1e-6)
             twin.update(q)
             if now >= next_print:
-                record_torques(log_path, piper, q, command.gravity, command.force_torque)
                 print("目标 XYZ(m):", np.asarray(target))
                 print("实际 XYZ(m):", command.position)
                 print("重力力矩:",command.gravity)

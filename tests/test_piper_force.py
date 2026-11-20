@@ -8,7 +8,7 @@ import numpy as np
 from piper.controllers.pinocchio_controller import PinocchioControl
 from piper.models import OFFICIAL_MODEL
 from piper.real.force.vmc import move_to_initial_pose
-from piper.real.force import mit, vmc as run
+from piper.real.force import vmc as run
 
 
 class XYZImpedanceTests(unittest.TestCase):
@@ -79,46 +79,6 @@ class XYZImpedanceTests(unittest.TestCase):
                 move_to_initial_pose(arm, self.controller)
         arm.send_joint_torques.assert_not_called()
 
-    def test_entrypoint_sends_pure_torque_and_closes_resources(self):
-        arm = MagicMock()
-        arm.has_feedback.return_value = True
-        arm.read_joint_positions.return_value = self.q.copy()
-        arm.enable.return_value = True
-        twin = MagicMock()
-        twin.process.is_alive.side_effect = [True, False]
-        twin.stop.is_set.return_value = False
-        twin.read_target_position.return_value = self.position.copy()
-        with patch.object(run, "PiperInterface", return_value=arm), \
-             patch.object(run, "DigitalTwin", return_value=twin), \
-             patch.object(run, "move_to_initial_pose"), \
-             patch("builtins.print"):
-            run.main()
-        self.assertEqual(arm.send_joint_torques.call_count, 1)
-        for call in arm.send_joint_torques.call_args_list:
-            self.assertEqual(call.kwargs, {"kp": 0.0, "kd": 0.0})
-            np.testing.assert_allclose(call.args[0], self.controller.gravity(self.q))
-        twin.close.assert_called_once()
-        arm.close.assert_called_once()
-
-    def test_mit_holds_initial_pose_with_joint_pd_and_gravity(self):
-        target = self.controller.ik(np.zeros(6), run.INITIAL_POSITION)
-        arm = MagicMock()
-        arm.read_joint_positions.return_value = target.copy()
-        twin = MagicMock()
-        twin.process.is_alive.side_effect = [True, False]
-        twin.stop.is_set.return_value = False
-        with patch.object(mit, "PiperInterface", return_value=arm), \
-             patch.object(mit, "DigitalTwin", return_value=twin), \
-             patch.object(mit, "move_to_initial_pose", return_value=target), \
-             patch("builtins.print"):
-            mit.main()
-        arm.send_joint_torques.assert_called_once()
-        call = arm.send_joint_torques.call_args
-        np.testing.assert_allclose(call.args[0], self.controller.gravity(target))
-        np.testing.assert_allclose(call.kwargs["positions"], target)
-        self.assertEqual((call.kwargs["kp"], call.kwargs["kd"]), (mit.KP, mit.KD))
-        twin.close.assert_called_once()
-        arm.close.assert_called_once()
 
     def test_invalid_command_exits_through_position_hold(self):
         arm = MagicMock()

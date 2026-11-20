@@ -7,13 +7,12 @@ from piper.controllers.pinocchio_controller import PinocchioControl
 from piper.interface.piper import PiperInterface
 from piper.models import OFFICIAL_MODEL
 from piper.real.digital_twin import DigitalTwin
-from piper.real.force.diagnostics import diagnostic_path, record_torques
 
 
 
 CONTROL_PERIOD = 1 / 200  # s
 PRINT_PERIOD = 0.1  # s
-KP = 5.0
+KP = 0.5
 KD = 0.01
 
 
@@ -41,7 +40,6 @@ def move_to_initial_pose(piper, control):
             raise TimeoutError("30 秒内未到达初始末端位姿，停止进入力控制")
         time.sleep(CONTROL_PERIOD)
 def main():
-    log_path = diagnostic_path()
     control = PinocchioControl(model_path=OFFICIAL_MODEL)
     piper = PiperInterface(can_name="can_piper", mode="position")
     twin = None
@@ -64,14 +62,12 @@ def main():
             twin.update(q)
 
             if now >= next_print:
-                record_torques(log_path, piper, q, gravity_torque)
                 feedback_torque = piper.read_joint_torques()
                 feedforward_magnitude = np.abs(gravity_torque)
                 print("关节角(rad):", q)
                 print("相对保持目标的偏差(rad):", q - hold_positions)
                 print("前馈幅值(N·m):", feedforward_magnitude)
                 print("反馈幅值(N·m):", feedback_torque)
-                print("其他力矩(N·m):", feedback_torque - feedforward_magnitude)
                 next_print = now + PRINT_PERIOD
 
             next_tick += CONTROL_PERIOD
