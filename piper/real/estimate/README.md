@@ -1,5 +1,7 @@
 # 真机重力辨识数据采集
 
+真机采集入口统一使用 `piper.interface.piper_new.PiperInterface`（`pyAgxArm`），通过 SDK 查询主控版本，仅允许固件严格高于 1.8.8。目标角使用 rad，反馈力矩直接采用 SDK 提供的 N·m，不额外叠加旧接口的 `/4` 或方向换算。离线参数拟合不连接硬件。
+
 用已采集的 `data/gravity.npz` 做 Y 矩阵参数更新并打印前后变化：
 
 ```bash

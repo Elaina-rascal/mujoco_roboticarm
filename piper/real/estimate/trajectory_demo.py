@@ -5,7 +5,7 @@ import time
 
 import numpy as np
 
-from piper.interface.piper import PiperInterface
+from piper.interface.piper_new import PiperInterface
 from piper.real.estimate.trajectory import HOLD_TIME, MOVE_TIME, make_waypoints, trajectory
 
 

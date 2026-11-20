@@ -4,7 +4,7 @@ import time
 import numpy as np
 import pinocchio as pin
 from piper.controllers.pinocchio_controller import PinocchioControl
-from piper.interface.piper import PiperInterface
+from piper.interface.piper_new import PiperInterface
 from piper.models import OFFICIAL_MODEL
 from piper.real.digital_twin import DigitalTwin
 
@@ -12,8 +12,8 @@ from piper.real.digital_twin import DigitalTwin
 
 CONTROL_PERIOD = 1 / 200  # s
 PRINT_PERIOD = 0.1  # s
-KP = 0.5
-KD = 0.01
+KP = 0.1
+KD = 0.001
 
 
 STARTUP_TIMEOUT = 30.0
@@ -63,7 +63,7 @@ def main():
 
             if now >= next_print:
                 feedback_torque = piper.read_joint_torques()
-                feedforward_magnitude = np.abs(gravity_torque)
+                feedforward_magnitude = gravity_torque
                 print("关节角(rad):", q)
                 print("相对保持目标的偏差(rad):", q - hold_positions)
                 print("前馈幅值(N·m):", feedforward_magnitude)

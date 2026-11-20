@@ -6,7 +6,7 @@ import numpy as np
 import pinocchio as pin
 
 from piper.controllers.pinocchio_controller import PinocchioControl
-from piper.interface.piper import PiperInterface
+from piper.interface.piper_new import PiperInterface
 from piper.real.digital_twin import DigitalTwin
 
 

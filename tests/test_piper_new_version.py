@@ -1,6 +1,7 @@
 """新版接口的启动版本门槛；不测试力矩前馈，不连接 CAN。"""
 
 from types import SimpleNamespace
+import importlib
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -8,6 +9,12 @@ from piper.interface.piper_new import PiperInterface
 
 
 class VersionGateTests(unittest.TestCase):
+    def test_all_real_hardware_entrypoints_use_new_interface(self):
+        for name in ("piper.real.position.run", "piper.real.force.mit",
+                     "piper.real.force.vmc", "piper.real.estimate.trajectory_demo"):
+            with self.subTest(module=name):
+                self.assertIs(importlib.import_module(name).PiperInterface, PiperInterface)
+
     def setUp(self):
         self.factory = MagicMock()
         self.sdk = self.factory.create_arm.return_value

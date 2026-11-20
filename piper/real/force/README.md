@@ -7,7 +7,7 @@ python3 -m piper.real.force.mit
 python3 -m piper.real.force.vmc
 ```
 
-VMC 使用 `piper/interface/piper_new.py` 的 `pyAgxArm` 接口（容器内安装 1.0.0），MIT 入口仍使用原 `piper_sdk` 接口。新接口先连接 SDK，通过 `sdk.get_firmware(timeout=3.0)` 取得软件版本，严格要求 **> 1.8.8** 后才设置控制模式；`S-V1.8-8` 及以下、未知版本或查询超时均断开并拒绝启动。版本查询与报文解析完全交给 SDK，不自行发送 CAN 查询或解包。符合门槛的固件使用 `v189` 配置，当前 `S-V1.9-1` 对应此配置。
+MIT 和 VMC 均使用 `piper/interface/piper_new.py` 的 `pyAgxArm` 接口（容器内安装 1.0.0），与 `real` 下的位置控制和辨识采集入口一致。新接口先连接 SDK，通过 `sdk.get_firmware(timeout=3.0)` 取得软件版本，严格要求 **> 1.8.8** 后才设置控制模式；`S-V1.8-8` 及以下、未知版本或查询超时均断开并拒绝启动。版本查询与报文解析完全交给 SDK，不自行发送 CAN 查询或解包。符合门槛的固件使用 `v189` 配置，当前 `S-V1.9-1` 对应此配置。
 
 六轴前馈以输出端 N·m 交给 `move_mit(t_ff=...)`，分轴缩放和编码由新版 SDK 完成；外层不统一除以 4，也不套用 1.5-8 的反号。反馈直接读取 SDK 的 `torque`（N·m），不重复乘系数。此前的前馈对比、JSONL 诊断和 CAN 采集实验代码已移除，结论保存在 [力矩前馈调查记录](TORQUE_FEEDFORWARD.md)。
 
