@@ -1,16 +1,14 @@
 """运行：python3 -m piper.real.force.vmc，拖动目标球控制末端 XYZ 阻抗。"""
 
-from dataclasses import dataclass
 import time
 
 import numpy as np
-import pinocchio as pin
 
 from piper.interface.piper_new import PiperInterface
 from piper.models import OFFICIAL_MODEL
 from piper.real.digital_twin import DigitalTwin
 from piper.controllers.pinocchio_controller import PinocchioControl
-from piper.interface.base import vector
+from piper.controllers.impedance_controller import ImpedanceController
 
 
 CONTROL_PERIOD = 1 / 200  # s
@@ -24,30 +22,12 @@ MAX_FORCE = np.array([20.0, 20.0, 20.0])  # N，逐轴限幅
 INITIAL_POSITION = np.array([0.249335, 0.0308932, 0.266156])
 
 
-@dataclass
-class ImpedanceCommand:
-    torque: np.ndarray
-    force: np.ndarray
-    position: np.ndarray
-    velocity: np.ndarray
-    gravity: np.ndarray
-    force_torque: np.ndarray
-
-
 def compute_impedance(control, q, dq, target):
-    """计算 XYZ 弹簧阻尼力并限幅，映射后在此叠加重力补偿。"""
-    q, dq, target = vector(q, 6), vector(dq, 6), vector(target, 3)
-    position = control.fk(q).translation.copy()
-    jacobian = pin.computeFrameJacobian(
-        control.model, control.data, q, control.ee_id,
-        pin.ReferenceFrame.LOCAL_WORLD_ALIGNED,
-    )[:3, :].copy()
-    velocity = jacobian @ dq
-    force = np.clip(KP * (target - position) - KD * velocity, -MAX_FORCE, MAX_FORCE)
-    gravity = control.gravity(q)
-    force_torque = control.force_to_torque(q, force)
-    torque = force_torque + gravity
-    return ImpedanceCommand(torque, force, position, velocity, gravity,force_torque)
+    """兼容原 XYZ 调用；阻抗计算统一放在 controllers 中。"""
+    return ImpedanceController(
+        kp=np.r_[KP, np.zeros(3)], kd=np.r_[KD, np.zeros(3)],
+        max_wrench=np.r_[MAX_FORCE, np.ones(3)], control=control,
+    ).compute(q, dq, target)
 
 
 STARTUP_TIMEOUT = 30.0
@@ -78,6 +58,10 @@ def move_to_initial_pose(piper, control):
 
 def main():
     control = PinocchioControl(model_path=OFFICIAL_MODEL)
+    impedance = ImpedanceController(
+        kp=np.r_[KP, np.zeros(3)], kd=np.r_[KD, np.zeros(3)],
+        max_wrench=np.r_[MAX_FORCE, np.ones(3)], control=control,
+    )
     piper = PiperInterface(can_name="can_piper", mode="position")
     twin = None
     np.set_printoptions(precision=6, suppress=True)
@@ -103,7 +87,7 @@ def main():
                 dq += alpha * (raw_dq - dq)
             previous_q, previous_time = q.copy(), now
             target = twin.read_target_position()
-            command = compute_impedance(control, q, dq, target)
+            command = impedance.compute(q, dq, target)
             # 弹簧和阻尼已在 XYZ 空间实现，不再叠加关节 MIT PD 锁住姿态。
             piper.send_joint_torques(command.torque, kp=0.1, kd=1e-6)
             twin.update(q)

@@ -12,7 +12,7 @@ EE_TO_LEVEL = pin.rpy.rpyToMatrix(0.0, -np.pi / 2, 0.0) #type:ignore
 
 
 class PinocchioControl:
-    def __init__(self, damping=0.01, model_path=ARM_MODEL):
+    def __init__(self, damping=0.01, model_path=ARM_MODEL, gripper_width=0.0):
         self.model_path = Path(model_path).resolve()
         self.damping = damping
         self.min_singular_value = 1e-3
@@ -23,7 +23,12 @@ class PinocchioControl:
         self.task_dimension = 5
         full_model = pin.buildModelFromMJCF(str(self.model_path))
         fingers = [full_model.getJointId(name) for name in ("joint7", "joint8")]
-        self.model = pin.buildReducedModel(full_model, fingers, pin.neutral(full_model)) #type:ignore
+        if not np.isfinite(gripper_width) or not 0 <= gripper_width <= 0.07:
+            raise ValueError("夹爪开度需要在 0～0.07 m 之间")
+        reference = pin.neutral(full_model)
+        for joint_id, sign in zip(fingers, (1, -1)):
+            reference[full_model.joints[joint_id].idx_q] = sign * gripper_width / 2
+        self.model = pin.buildReducedModel(full_model, fingers, reference) #type:ignore
         self.data = self.model.createData()
         if not self.model.existFrame("ee"):
             raise ValueError("模型中缺少末端 ee")

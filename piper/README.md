@@ -3,7 +3,8 @@
 ```text
 piper/
 ├── controllers/
-│   └── pinocchio_controller.py   # FK / IK / 重力 / VMC 力矩映射
+│   ├── pinocchio_controller.py   # FK / IK / 重力 / VMC 力矩映射
+│   └── impedance_controller.py   # 共用 XYZ / 六自由度笛卡尔阻抗
 ├── interface/
 │   ├── base.py                # 真机与仿真的四个共同方法
 │   ├── piper.py               # 历史 piper_sdk 接口
@@ -13,6 +14,7 @@ piper/
 ├── sim/
 │   ├── position/              # run.py 和本场景的 controller.py
 │   ├── torque/                # run.py 和本场景的 controller.py
+│   ├── impedance/             # 六自由度阻抗仿真，位置 + 完整姿态
 │   └── estimate/    # 离线重力参数辨识
 └── real/
     ├── position/run.py
@@ -27,6 +29,7 @@ piper/
 ```bash
 python3 -m piper.sim.position.run
 python3 -m piper.sim.torque.run
+python3 -m piper.sim.impedance.run
 python3 -m piper.sim.estimate.gravity_identification
 python3 -m piper.sim.estimate.trajectory_demo
 
@@ -54,7 +57,9 @@ python3 -m piper.real.estimate.trajectory_demo
 
 力矩通过 MIT 发送，默认纯前馈；`real.force.mit` 启动时到达给定位姿，再用 MIT PD 保持对应关节角。`real.force.vmc` 使用世界系 XYZ 弹簧阻尼，姿态自由，Kp=60 N/m、Kd=3 N·s/m、每轴独立限幅 ±20 N，通过 `J_xyz.T @ F + g(q)` 发送，具体见 [force/README.md](real/force/README.md)。真机力矩反馈仍为电流估算值，辨识采集直接保存新版 SDK 的反馈 N·m。
 
-控制器按各自场景使用，不统一 `compute` 签名，也不依赖具体硬件接口。位置仿真保留原来的姿态约束，力矩仿真保留全模型重力计算。真机位置控制继续使用 `models/arm.xml`；真机力矩和两个仿真入口继续使用 `models/arm_official.xml`，模型参数未修改。
+控制器按各自场景使用，不统一 `compute` 签名，也不依赖具体硬件接口。位置仿真保留原来的姿态约束，纯重力补偿仿真保留全模型重力计算。真机位置控制继续使用 `models/arm.xml`；真机力矩和仿真入口使用 `models/arm_official.xml`，模型参数未修改。
+
+六自由度阻抗的交互、坐标约定和无窗口运行方式见 [sim/impedance/README.md](sim/impedance/README.md)。真机 VMC 的 XYZ 计算也调用共用 `ImpedanceController`，继续只控制平移。
 
 验证（不连接真机）：
 
