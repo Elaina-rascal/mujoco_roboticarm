@@ -47,17 +47,38 @@ class PiperInterface(ArmInterface):
             self.sdk.disconnect()
             self._closed = True
             raise
-        print(f"[Piper/pyAgxArm] 主控固件：{self.firmware_version}，SDK 配置：{self.sdk_profile}", flush=True)
+        print(f"\033[38;2;200;162;255m[Piper/pyAgxArm] 主控固件：{self.firmware_version}，SDK 配置：{self.sdk_profile}\033[0m", flush=True)
 
-    def _read_firmware_version(self, timeout=3.0):
-        """由 SDK 查询并解析版本，本层仅读取返回的软件版本字段。"""
-        firmware = self.sdk.get_firmware(timeout=timeout)
-        if not firmware:
-            raise TimeoutError("SDK 读取主控固件版本超时，未进入控制模式")
-        version = firmware.get("software_version")
-        if not isinstance(version, str):
-            raise ValueError(f"SDK 未返回有效软件版本：{version!r}")
-        return version.strip("\x00\r\n ")
+    def _wait_for_receiver(self, timeout):
+        """等 SDK 接收帧率就绪，否则 get_firmware 会清掉过早到达的回复。"""
+        deadline = time.monotonic() + timeout
+        while True:
+            error = self.sdk.get_comm_error()
+            if error is not None:
+                raise ConnectionError(f"CAN 接收异常：{error}") from error
+            if self.sdk.get_fps() > 0:
+                return
+            if time.monotonic() >= deadline:
+                raise TimeoutError("CAN 未收到有效反馈，未发送版本查询；请检查接口和机械臂连接")
+            time.sleep(0.01)
+
+    def _read_firmware_version(self, timeout=3.0, attempts=3):
+        """先等待接收就绪，再通过 SDK 有限重试；不自行解析 CAN。"""
+        for attempt in range(1, attempts + 1):
+            self._wait_for_receiver(timeout)
+            # SDK 一次调用只请求一次。重试时绕过请求节流，确保真正重发。
+            firmware = self.sdk.get_firmware(timeout=timeout, min_interval=0.0)
+            if firmware:
+                version = firmware.get("software_version")
+                if not isinstance(version, str):
+                    raise ValueError(f"SDK 未返回有效软件版本：{version!r}")
+                return version.strip("\x00\r\n ")
+            error = self.sdk.get_comm_error()
+            if error is not None:
+                raise ConnectionError(f"版本查询期间 CAN 通信异常：{error}") from error
+            if attempt < attempts:
+                print(f"[Piper/pyAgxArm] 版本查询无完整回复，重试 {attempt + 1}/{attempts}", flush=True)
+        raise TimeoutError(f"SDK 版本查询 {attempts} 次均超时，未进入控制模式")
 
     def send_joint_positions(self, positions, speed_percent=10):
         targets = vector(positions, 6)
@@ -133,7 +154,7 @@ class PiperInterface(ArmInterface):
                 time.sleep(0.02)
                 sample = self.read_status_sample()
                 if sample["status"] is not None and sample["status"]["mode_feed"] == 0x01:
-                    print("[Piper/pyAgxArm] 已切换到位置模式，保持当前位置", flush=True)
+                    print("\033[38;2;200;162;255m[Piper/pyAgxArm] 已切换到位置模式，保持当前位置\033[0m", flush=True)
                     return
             raise TimeoutError("退出时未确认切换到位置模式")
         finally:

@@ -18,6 +18,8 @@ class VersionGateTests(unittest.TestCase):
     def setUp(self):
         self.factory = MagicMock()
         self.sdk = self.factory.create_arm.return_value
+        self.sdk.get_fps.return_value = 200.0
+        self.sdk.get_comm_error.return_value = None
         self.config = MagicMock(return_value={"joint_torque_c": [1.] * 6})
         self.module = SimpleNamespace(
             AgxArmFactory=self.factory, create_agx_arm_config=self.config,
@@ -44,7 +46,7 @@ class VersionGateTests(unittest.TestCase):
                 arm = PiperInterface()
                 self.assertEqual(arm.firmware_version, version)
                 self.module.resolve_firmware_profile.assert_called_with("piper", version)
-                self.sdk.get_firmware.assert_called_once_with(timeout=3.0)
+                self.sdk.get_firmware.assert_called_once_with(timeout=3.0, min_interval=0.0)
         self.assertEqual(self.factory.create_arm.call_count, 3)
 
     def test_unknown_or_unreadable_version_disconnects(self):
@@ -57,6 +59,47 @@ class VersionGateTests(unittest.TestCase):
                     PiperInterface()
             self.sdk.disconnect.assert_called_once()
             self.sdk.set_motion_mode.assert_not_called()
+
+    def test_cold_receiver_is_ready_before_first_query(self):
+        events = []
+        rates = iter([0.0, 0.0, 200.0])
+        self.sdk.get_fps.side_effect = lambda: events.append("fps") or next(rates)
+        self.sdk.get_firmware.side_effect = lambda **kw: events.append("query") or {"software_version": "S-V1.9-1"}
+        with patch.dict("sys.modules", {"pyAgxArm": self.module}), \
+             patch("piper.interface.piper_new.time.sleep") as sleep:
+            PiperInterface()
+        self.assertEqual(events, ["fps", "fps", "fps", "query"])
+        self.assertEqual(sleep.call_count, 2)
+
+    def test_partial_or_lost_reply_is_retried(self):
+        self.sdk.get_firmware.side_effect = [None, {"software_version": "S-V1.9-1"}]
+        with patch.dict("sys.modules", {"pyAgxArm": self.module}):
+            arm = PiperInterface()
+        self.assertEqual(arm.firmware_version, "S-V1.9-1")
+        self.assertEqual(self.sdk.get_firmware.call_count, 2)
+        self.sdk.get_firmware.assert_called_with(timeout=3.0, min_interval=0.0)
+
+    def test_no_feedback_times_out_without_query_or_motion(self):
+        self.sdk.get_fps.return_value = 0.0
+        with patch.dict("sys.modules", {"pyAgxArm": self.module}), \
+             patch("piper.interface.piper_new.time.monotonic", side_effect=[0, 0, 3]), \
+             patch("piper.interface.piper_new.time.sleep"):
+            with self.assertRaisesRegex(TimeoutError, "CAN 未收到有效反馈"):
+                PiperInterface()
+        self.sdk.get_firmware.assert_not_called()
+        self.sdk.set_motion_mode.assert_not_called()
+        self.sdk.disconnect.assert_called_once()
+
+    def test_comm_error_during_query_stops_without_entering_control(self):
+        self.sdk.get_firmware.return_value = None
+        errors = iter([None, OSError("Network is down")])
+        self.sdk.get_comm_error.side_effect = lambda: next(errors)
+        with patch.dict("sys.modules", {"pyAgxArm": self.module}):
+            with self.assertRaisesRegex(ConnectionError, "CAN 通信异常"):
+                PiperInterface()
+        self.sdk.get_firmware.assert_called_once()
+        self.sdk.set_motion_mode.assert_not_called()
+        self.sdk.disconnect.assert_called_once()
 
 
 if __name__ == "__main__":
