@@ -1,4 +1,4 @@
-"""项目根目录运行：python3 -m piper.sim.torque.run。"""
+"""项目根目录运行：python3 -m piper.sim.torque.gravity。"""
 
 import time
 

@@ -28,7 +28,7 @@ link6 仍为 0.007 kg，双指各 0.025 kg，J6 下游总质量 **1.257 kg**。
 
 ```bash
 python3 -m piper.sim.position.run
-python3 -m piper.sim.torque.run
+python3 -m piper.sim.torque.gravity
 ```
 
 `piper.real.force.mit`、`piper.real.force.vmc` 的动力学及数字孪生、位置和力矩仿真使用 `arm_official.xml`；
