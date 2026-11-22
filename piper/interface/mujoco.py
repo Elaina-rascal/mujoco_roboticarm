@@ -60,6 +60,26 @@ class MujocoInterface(ArmInterface):
         self.data.mocap_pos[self.target_id] = vector(position, 3)
         mujoco.mj_forward(self.model, self.data)
 
+    def target_pose(self):
+        """返回目标的世界系位置和工具姿态矩阵，姿态直接表示 B 系。"""
+        rotation = np.empty(9)
+        mujoco.mju_quat2Mat(rotation, self.data.mocap_quat[self.target_id])
+        return self.data.mocap_pos[self.target_id].copy(), rotation.reshape(3, 3)
+
+    def set_target_pose(self, position, rotation):
+        """设置完整目标位姿；旋转为工具 B 系相对世界系的旋转。"""
+        position = vector(position, 3)
+        rotation = np.asarray(rotation, dtype=float)
+        if (rotation.shape != (3, 3) or not np.all(np.isfinite(rotation))
+                or not np.allclose(rotation.T @ rotation, np.eye(3), atol=1e-7)
+                or not np.isclose(np.linalg.det(rotation), 1.0, atol=1e-7)):
+            raise ValueError("目标姿态需要为有效的 3×3 旋转矩阵")
+        quaternion = np.empty(4)
+        mujoco.mju_mat2Quat(quaternion, rotation.ravel())
+        self.data.mocap_pos[self.target_id] = position
+        self.data.mocap_quat[self.target_id] = quaternion
+        mujoco.mj_forward(self.model, self.data)
+
     def send_joint_positions(self, positions):
         if self.mode != "position":
             raise RuntimeError("需要在 position 模式下发送位置")
@@ -88,26 +108,31 @@ class MujocoInterface(ArmInterface):
             mujoco.mj_step(self.model, self.data)
         mujoco.mj_forward(self.model, self.data)
 
-    def draw_ee_frames(self, viewer):
+    def draw_ee_frames(self, viewer, draw_target=False):
         """画控制器所用夹爪参考系 B：三根箭头是 R_WB 的三个列向量。"""
         origin = self.data.site_xpos[self.ee_id].copy()
         body_rotation = self.data.site_xmat[self.ee_id].reshape(3, 3) @ EE_TO_BODY_ROTATION
         colors = np.array([[1, 0.1, 0.1, 1], [0.1, 1, 0.1, 1], [0.1, 0.4, 1, 1]])
+        frames = [("body", origin, body_rotation, 0.18)]
+        if draw_target:
+            target_position, target_rotation = self.target_pose()
+            frames.append(("target", target_position, target_rotation, 0.12))
         with viewer.lock():
             scene = viewer.user_scn
             scene.ngeom = 0
-            for axis, axis_name in enumerate("XYZ"):
-                geom = scene.geoms[scene.ngeom]
-                mujoco.mjv_initGeom(
-                    geom, mujoco.mjtGeom.mjGEOM_ARROW,
-                    np.zeros(3), origin, np.eye(3).ravel(), colors[axis],
-                )
-                mujoco.mjv_connector(
-                    geom, mujoco.mjtGeom.mjGEOM_ARROW, 0.006,
-                    origin, origin + 0.18 * body_rotation[:, axis],
-                )
-                geom.label = f"body.{axis_name}"
-                scene.ngeom += 1
+            for name, position, rotation, length in frames:
+                for axis, axis_name in enumerate("XYZ"):
+                    geom = scene.geoms[scene.ngeom]
+                    mujoco.mjv_initGeom(
+                        geom, mujoco.mjtGeom.mjGEOM_ARROW,
+                        np.zeros(3), position, np.eye(3).ravel(), colors[axis],
+                    )
+                    mujoco.mjv_connector(
+                        geom, mujoco.mjtGeom.mjGEOM_ARROW, 0.006,
+                        position, position + length * rotation[:, axis],
+                    )
+                    geom.label = f"{name}.{axis_name}"
+                    scene.ngeom += 1
 
     def fk(self, q):
         """六轴角度 → 世界系夹爪中心 4×4 位姿，不改变仿真状态。"""

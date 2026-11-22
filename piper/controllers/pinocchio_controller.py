@@ -12,7 +12,7 @@ EE_TO_LEVEL = pin.rpy.rpyToMatrix(0.0, -np.pi / 2, 0.0) #type:ignore
 
 
 class PinocchioControl:
-    def __init__(self, damping=0.01, model_path=ARM_MODEL):
+    def __init__(self, damping=0.01, model_path=ARM_MODEL, gripper_width=0.0):
         self.model_path = Path(model_path).resolve()
         self.damping = damping
         self.min_singular_value = 1e-3
@@ -23,7 +23,12 @@ class PinocchioControl:
         self.task_dimension = 5
         full_model = pin.buildModelFromMJCF(str(self.model_path))
         fingers = [full_model.getJointId(name) for name in ("joint7", "joint8")]
-        self.model = pin.buildReducedModel(full_model, fingers, pin.neutral(full_model)) #type:ignore
+        if not np.isfinite(gripper_width) or not 0 <= gripper_width <= 0.07:
+            raise ValueError("夹爪开度需要在 0～0.07 m 之间")
+        reference = pin.neutral(full_model)
+        for joint_id, sign in zip(fingers, (1, -1)):
+            reference[full_model.joints[joint_id].idx_q] = sign * gripper_width / 2
+        self.model = pin.buildReducedModel(full_model, fingers, reference) #type:ignore
         self.data = self.model.createData()
         if not self.model.existFrame("ee"):
             raise ValueError("模型中缺少末端 ee")
@@ -54,6 +59,26 @@ class PinocchioControl:
             pin.ReferenceFrame.LOCAL_WORLD_ALIGNED,
         )[:3, :]
         return (jacobian.T @ force).copy()
+
+    def computed_torque(self, q, dq, error, kp=100.0, kd=20.0):
+        """M(q) @ (Kp*e - Kd*dq) + C*dq + g，目标速度为零。
+
+        error 由调用方计算，顺序 joint1～joint6，单位 rad。kp/kd 可为
+        非负标量或六轴向量，单位 s^-2、s^-1。接口负责执行器力矩限幅。
+        """
+        q, dq, error = vector(q, 6), vector(dq, 6), vector(error, 6)
+        kp = vector(np.broadcast_to(np.asarray(kp, dtype=float), (6,)), 6)
+        kd = vector(np.broadcast_to(np.asarray(kd, dtype=float), (6,)), 6)
+        if np.any(kp < 0) or np.any(kd < 0):
+            raise ValueError("Kp 和 Kd 必须非负")
+        ddq_command = kp * error - kd * dq
+        # RNEA 直接计算 M(q) @ ddq_command + C(q,dq) @ dq + g(q)。
+        # 等价的 CRBA 写法（需要单独使用质量矩阵时）：
+        # mass = pin.crba(self.model, self.data, q).copy()
+        # mass = np.triu(mass) + np.triu(mass, 1).T  # 补全对称下三角
+        # nonlinear = pin.nonLinearEffects(self.model, self.data, q, dq).copy()
+        # torque = mass @ ddq_command + nonlinear
+        return pin.rnea(self.model, self.data, q, dq, ddq_command).copy()
 
     def ik(self, joint_positions, target_position,check=True):
         """求目标位置的六轴角度；工具保持水平，世界 yaw 自由，失败则返回初始 q。"""
