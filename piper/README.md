@@ -69,3 +69,5 @@ python3 -m piper.real.estimate.trajectory_demo
 ```bash
 python3 -m unittest discover -s tests -p 'test_piper_interfaces.py' -v
 ```
+
+完整六自由度 IK 逐帧记录与 GIF：`python3 -m piper.sim.position.ik6_timelapse`，见 [IK6_TIMELAPSE.md](sim/position/IK6_TIMELAPSE.md)。

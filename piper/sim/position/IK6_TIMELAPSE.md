@@ -1,0 +1,43 @@
+# 六自由度 IK 逐帧 GIF
+
+仅仿真，不连接真机。完整约束位置 XYZ 和姿态，不使用五维 H 投影。`check=False` 关闭原有接受检查，保留物理关节限位。
+
+## 当前展示：更大残差、自然停滞的目标点
+
+```bash
+python3 -m piper.sim.position.ik6_timelapse \
+  --initial-q 0.2 1 -1.1 0.2 0.4 -0.3 \
+  --target 0.2 0.1 0.45 --rpy-deg 0 0 0 \
+  --output artifacts/ik6/large_error
+```
+
+目标位置 `[0.2,0.1,0.45] m`、工具姿态 R=I。从上述非奇异初值出发，第 168 次更新后连续两次最大关节变化小于 `1e-4 rad`，实际停滞并结束，共保留 169 帧。本轮没有因降秩提前截断。最终位置距离约 30.12 cm、姿态角差约 81.16°，J1/J5 触及限位。这比之前 `[0.3,0.2,0.3] m` 案例的位置距离约 1.09 cm、姿态角差约 3.32° 更明显。数值停滞不能直接当作目标全局无解的证明。
+
+GIF 位于 `artifacts/ik6/large_error/piper_ik6.gif`；同目录保存每次迭代 PNG 与 JSON。绿色球为目标位置，较长 XYZ 轴为目标姿态，较短 XYZ 轴为当前姿态，琥珀色线为末端迭代路径。
+
+GIF 只显示完整 Log6 的六个分量与一个最小奇异值：
+
+```text
+Log6(T^-1 Td) = [rho_x, rho_y, rho_z, phi_x, phi_y, phi_z]
+```
+
+前三项 rho 以 **cm** 显示，后三项 phi 以 **°** 显示。JSON 原始值保持 m/rad，不影响求解及停止判断。rho 是 SE(3) 对数的平移分量，与旋转耦合，不等于世界系位置差；phi 是旋转向量分量，不是独立欧拉角。
+
+求解器使用原位置差加旋转 Log3 的六维误差、相应误差雅克比、DLS 阻尼 0.01 和更新步长 0.1；Log6 为精确计算的观测量。`sigma_min(J)` 是求解所用误差雅克比的最小奇异值，小于等于 0.001 时标红。
+
+## 停止与输出
+
+- 达到原混合残差阈值 0.001 时成功结束。
+- 连续两次最大关节更新小于 `1e-4 rad` 时停滞结束。
+- 首次有效秩降至 6 以下后再迭代 20 次结束，可通过 `--post-rank-iterations` 调整。
+- `--max-iterations` 默认 1000，仅作为计算预算兜底。
+
+有效秩按奇异值大于 0.001 的数量估计，依赖单位和尺度，不等同于精确代数秩。原降秩示例仍可复现：
+
+```bash
+python3 -m piper.sim.position.ik6_timelapse \
+  --initial-q 0.2 1 -1.1 0.2 0.4 -0.3 --rpy-deg 0 0 180 \
+  --post-rank-iterations 20 --output artifacts/ik6/rank_loss
+```
+
+依赖 MuJoCo、Pinocchio、NumPy 和 Pillow。容器中使用已有显示服务的默认 GLFW 离屏渲染后端即可。GIF 是 IK 迭代记录，不是动力学轨迹或真机运动。

@@ -20,3 +20,6 @@ result.json
 core.*
 MUJOCO_LOG.TXT__pycache__/
 .venv/
+
+# IK 逐帧图片、数值轨迹和生成的 GIF
+/artifacts/ik6/
