@@ -12,13 +12,13 @@ from piper.real.digital_twin import DigitalTwin
 
 CONTROL_PERIOD = 1 / 200  # s
 PRINT_PERIOD = 0.1  # s
-KP = 0.1
-KD = 0.001
+KP = 5
+KD = 0.05
 
 
 STARTUP_TIMEOUT = 30.0
 STARTUP_TOLERANCE = 0.02  # rad
-INITIAL_POSITION = np.array([0.249335, 0.0308932, 0.266156])
+INITIAL_POSITION = np.array([0.2, 0.1, 0.45])
 def move_to_initial_pose(piper, control):
     """调用现有 IK，以 10% 位置速度就位；工具水平，yaw 自由。"""
     deadline = time.monotonic() + STARTUP_TIMEOUT

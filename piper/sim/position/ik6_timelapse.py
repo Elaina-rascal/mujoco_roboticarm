@@ -144,11 +144,13 @@ def render_trace(trace, output):
     data.mocap_pos[target_id] = target
     camera = mujoco.MjvCamera()
     mujoco.mjv_defaultCamera(camera)
-    camera.lookat[:] = [.20, .03, .30]
+    # 轻微向下俯视，保留侧向观察并看清末端姿态。
+    camera.lookat[:] = [.05, .10, .30]
     camera.distance = 1.05
-    camera.azimuth = 135
-    camera.elevation = -22
-    font = ImageFont.load_default(size=18)
+    camera.azimuth = 240
+    camera.elevation = -25
+    font = ImageFont.load_default(size=16)
+    joint_limits = model.jnt_range[[model.joint(f'joint{i}').id for i in range(1, 7)]]
     images = []
     with mujoco.Renderer(model, height=540, width=720) as renderer:
         for index, state in enumerate(trace['frames']):
@@ -162,19 +164,22 @@ def render_trace(trace, output):
             for previous, current in zip(trace['frames'][:index], trace['frames'][1:index + 1]):
                 add_line(scene, np.array(previous['position']), np.array(current['position']),
                          [1, .65, .1, 1], width=.0015)
-            image = Image.new('RGB', (720, 648), '#101925')
-            image.paste(Image.fromarray(renderer.render()), (0, 108))
+            image = Image.new('RGB', (720, 580), '#101925')
+            image.paste(Image.fromarray(renderer.render()), (0, 40))
             draw = ImageDraw.Draw(image)
-            draw.text((18, 12), 'Log6(T^-1 Td)', font=font, fill='#ffffff')
+            q = np.asarray(state['q'])
+            margins = np.rad2deg(np.minimum(q - joint_limits[:, 0], joint_limits[:, 1] - q))
+            near = [f'J{i+1}:{margin:.1f}°' for i, margin in enumerate(margins) if margin <= 5.0]
+            status = 'Limits(<5°): ' + (' '.join(near) if near else 'none')
+            sig = f'sig_min={state["min_singular_value"]:.6f}'
+            # 始终只用一行，极端情况下所有关节都接近限位时自动缩小字体。
+            line_font = font
+            while draw.textlength(status + '  |  ' + sig, font=line_font) > 692:
+                line_font = ImageFont.load_default(size=line_font.size - 1)
+            draw.text((14, 11), status, font=line_font, fill='#ffbd69' if near else '#c9d5e3')
+            offset = 14 + draw.textlength(status + '  |  ', font=line_font)
             fill = '#ff7c85' if state['min_singular_value'] <= trace['rank_tolerance'] else '#66e0a3'
-            draw.text((390, 12), f'sigma_min(J) = {state["min_singular_value"]:.6f}',
-                      font=font, fill=fill)
-            for axis, label in enumerate(('x', 'y', 'z')):
-                x = 18 + 236 * axis
-                draw.text((x, 44), f'rho_{label} = {100 * state["log6_error"][axis]:+.2f} cm',
-                          font=font, fill='#ffffff')
-                draw.text((x, 74), f'phi_{label} = {np.rad2deg(state["log6_error"][axis + 3]):+.2f}°',
-                          font=font, fill='#ffffff')
+            draw.text((offset, 11), sig, font=line_font, fill=fill)
             image.save(frame_dir / f'iteration_{index:04d}.png')
             images.append(image)
     durations = [100] * len(images)
