@@ -11,6 +11,7 @@ piper/
 │   ├── piper_new.py           # real 统一使用的 pyAgxArm 接口
 │   └── mujoco.py              # MujocoInterface：位置 / 力矩仿真
 ├── models/                    # XML、URDF、网格和来源说明
+├── estimate/                  # 双向启动摩擦估计，不读取反馈力矩
 ├── sim/
 │   ├── position/              # run.py 和本场景的 controller.py
 │   ├── torque/                # gravity.py / computed_torque.py，独立仿真入口
@@ -41,9 +42,12 @@ python3 -m piper.real.force.mit
 python3 -m piper.real.force.vmc
 python3 -m piper.real.force.Mq_pd
 python3 -m piper.real.estimate.trajectory_demo
+python3 -m piper.real.estimate.friction_estimation
 ```
 
 仿真和控制器依赖 `numpy`、`mujoco`、支持 MJCF 的 `pin`；导入真机入口不连接硬件。
+
+逐轴启动摩擦测量见 [estimate/README.md](estimate/README.md)。
 
 接口统一继承 `ArmInterface`，关节按 `joint1`～`joint6` 排列：
 
