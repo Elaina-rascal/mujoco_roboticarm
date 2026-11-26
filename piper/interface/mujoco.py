@@ -13,11 +13,11 @@ EE_TO_BODY_ROTATION = np.array([[0.0, 0.0, -1.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.
 
 
 class MujocoInterface(ArmInterface):
-    def __init__(self, mode="position"):
+    def __init__(self, mode="position", model_path=OFFICIAL_MODEL):
         if mode not in ("position", "torque"):
             raise ValueError('mode 需要为 "position" 或 "torque"')
         self.mode = mode
-        self.model = mujoco.MjModel.from_xml_path(str(OFFICIAL_MODEL))
+        self.model = mujoco.MjModel.from_xml_path(str(model_path))
         self.data = mujoco.MjData(self.model)
         self.joint_ids = np.array([self.model.joint(n).id for n in ARM_JOINT_NAMES])
         self.q_ids = self.model.jnt_qposadr[self.joint_ids]

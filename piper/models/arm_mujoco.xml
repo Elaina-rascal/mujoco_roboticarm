@@ -1,0 +1,108 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco model="piper_mujoco_plant">
+  <!-- Simulation plant only, copied from arm_official.xml.
+       Moving-body mass and full inertia are scaled together by 0.95 to 1.08.
+       Geometry, COM, joint axes and limits remain identical to the nominal model.
+       Joint friction values are illustrative, not identified hardware parameters.
+       Controllers must keep using arm_official.xml. -->
+  <compiler angle="radian" meshdir="agilex_piper_official/assets" />
+  <option integrator="implicitfast" cone="elliptic" impratio="10" timestep="0.002">
+    <flag contact="disable" />
+  </option>
+  <default>
+    <!-- Dry friction is a soft constraint: harden it to suppress static creep.
+         0.004 s is twice the 0.002 s physics timestep; residual creep is not zero. -->
+    <joint frictionloss="0" armature="0.005"
+           solreffriction="0.004 1" solimpfriction="0.9999 0.9999 0.001 0.5 2" />
+    <position inheritrange="1" forcerange="-100 100" />
+  </default>
+  <asset>
+    <mesh name="base_link" file="base_link.stl" />
+    <mesh name="link1" file="link1.stl" />
+    <mesh name="link2" file="link2.stl" />
+    <mesh name="link3" file="link3.stl" />
+    <mesh name="link4" file="link4.stl" />
+    <mesh name="link5" file="link5.stl" />
+    <mesh name="link6" file="link6.stl" />
+    <mesh name="gripper_base" file="gripper_base.stl" />
+    <mesh name="link7" file="link7.stl" />
+    <mesh name="link8" file="link8.stl" />
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072" />
+  </asset>
+  <worldbody>
+    <body name="base_link" gravcomp="1">
+      <inertial mass="1.02" fullinertia="0.00267433 0.00282612 0.00089624 -0.00000073 -0.00017389 0.0000004" pos="-0.00473641164191482 2.56829134630247E-05 0.041451518036016" />
+      <geom type="mesh" mesh="base_link" density="0" contype="0" conaffinity="0" rgba="0.72 0.74 0.76 1" />
+      <body name="link1" gravcomp="1" pos="0 0 0.123" quat="1 0 0 0">
+        <inertial mass="0.7384" fullinertia="0.0005202808 0.0004251416 0.0004763408 8.112e-07 6.5104e-06 4.8048e-06" pos="0.00032 -0.00041 -0.00348" />
+        <geom type="mesh" mesh="link1" density="0" contype="0" conaffinity="0" rgba="0.72 0.74 0.76 1" />
+        <joint name="joint1" frictionloss="0.24" damping="0.04" type="hinge" axis="0 0 1" range="-2.6179938 2.6179938" />
+        <body name="link2" gravcomp="1" pos="0 0 0" quat="0.0479709575834103 -0.0479709210623824 -0.705477694515071 -0.70547771084752">
+          <inertial mass="1.2296" fullinertia="0.001186299 0.0716904606 0.07161254 0.0019389096 0.0002038698 8.1302e-06" pos="0.21852 -0.00861 0.00126" />
+          <geom type="mesh" mesh="link2" density="0" contype="0" conaffinity="0" rgba="0.72 0.74 0.76 1" />
+          <joint name="joint2" frictionloss="0.5" damping="0.08" type="hinge" axis="0 0 1" range="0 3.1415926" />
+          <body name="link3" gravcomp="1" pos="0.28503 0 0" quat="0.6240159902922 0 0 -0.781411571362778">
+            <inertial mass="0.475" fullinertia="0.012802276 0.0004405815 0.0129515495 0.001529823 6.27e-07 1.539e-06" pos="-0.01999 -0.14808 -0.00053" />
+            <geom type="mesh" mesh="link3" density="0" contype="0" conaffinity="0" rgba="0.72 0.74 0.76 1" />
+            <joint name="joint3" frictionloss="0.44" damping="0.08" type="hinge" axis="0 0 1" range="-2.9670597 0" />
+            <body name="link4" gravcomp="1" pos="-0.02198 -0.25075 0" quat="0.707106790659974 0.707106771713121 0 0">
+              <inertial mass="0.399" fullinertia="0.000187362 0.000198597 0.0001534365 6.51e-07 7.035e-07 4.284e-06" pos="0.00013 -0.00076 -0.00394" />
+              <geom type="mesh" mesh="link4" density="0" contype="0" conaffinity="0" rgba="0.72 0.74 0.76 1" />
+              <joint name="joint4" frictionloss="0.3" damping="0.02" type="hinge" axis="0 0 1" range="-1.7453292 1.7453292" />
+              <body name="link5" gravcomp="1" pos="0 0 0" quat="0.707106790659974 -0.707106771713121 0 0">
+                <inertial mass="0.41364" fullinertia="0.0018610344 0.0001937088 0.0018486576 2.7972e-06 1.08e-07 1.0692e-05" pos="0.00018 -0.06104 -0.00227" />
+                <geom type="mesh" mesh="link5" density="0" contype="0" conaffinity="0" rgba="0.72 0.74 0.76 1" />
+                <joint name="joint5" frictionloss="0.36" damping="0.02" type="hinge" axis="0 0 1" range="-1.2217304 1.2217304" />
+                <body name="link6" gravcomp="1" pos="8.8259E-05 -0.091 0" quat="0.707106790659974 0.707106771713121 0 0">
+                  <inertial mass="0.00672" fullinertia="0.0014602752 0.0013308096 0.0002990592 1.9392e-06 2.5056e-06 1.92e-08" pos="-0.00003 0.00006 -0.002" />
+                  <geom type="mesh" mesh="link6" density="0" contype="0" conaffinity="0" rgba="0.72 0.74 0.76 1" />
+                  <joint name="joint6" frictionloss="0.15" damping="0.01" type="hinge" axis="0 0 1" range="-2.0943951 2.0943951" />
+                  <body name="gripper_base" gravcomp="1" pos="0 0 0" quat="1 0 0 0">
+                    <inertial mass="0.63" fullinertia="0.000975807 0.0007501935 0.000414141 3.57e-07 -7.749e-06 5.25e-08" pos="-0.000183807162235591 8.05033155577911E-05 0.0321436689908876" />
+                    <geom type="mesh" mesh="gripper_base" density="0" contype="0" conaffinity="0" rgba="0.72 0.74 0.76 1" />
+                    <site name="ee" pos="0 0 0.1358" size="0.009" rgba="1 0.15 0.1 1" group="0" />
+                    <body name="link7" gravcomp="1" pos="0 0 0.1358" quat="0.707105482511236 0.707108079859474 0 0">
+                      <inertial mass="0.02575" fullinertia="7.59213e-05 8.0443e-06 7.6941e-05 -1.1639e-06 2.163e-07 -1.41316e-05" pos="0.00065123185041968 -0.0491929869131989 0.00972258769184025" />
+                      <geom type="mesh" mesh="link7" density="0" contype="0" conaffinity="0" rgba="0.72 0.74 0.76 1" />
+                      <joint name="joint7" type="slide" axis="0 0 1" range="0 0.035" />
+                    </body>
+                    <body name="link8" gravcomp="1" pos="0 0 0.1358" quat="-2.59734346696461e-06 -2.59735300755741e-06 -0.707108079854703 -0.707105482506466">
+                      <inertial mass="0.02575" fullinertia="7.59213e-05 8.0443e-06 7.6941e-05 -1.1639e-06 2.163e-07 -1.41316e-05" pos="0.000651231850419722 -0.0491929869131991 0.00972258769184024" />
+                      <geom type="mesh" mesh="link8" density="0" contype="0" conaffinity="0" rgba="0.72 0.74 0.76 1" />
+                      <joint name="joint8" type="slide" axis="0 0 -1" range="-0.035 0" />
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+    <light pos="0 0 1.5" dir="0 0 -1" directional="true" />
+    <geom name="floor" type="plane" size="0 0 0.05" rgba="0.22 0.25 0.27 1" />
+    <body name="target" mocap="true" pos="0.3 -0.1 0.35">
+      <geom type="sphere" size="0.018" rgba="0.2 1 0.3 0.65" contype="0" conaffinity="0" />
+    </body>
+  </worldbody>
+  <equality>
+    <joint joint1="joint8" joint2="joint7" polycoef="0 -1 0 0 0" />
+  </equality>
+  <actuator>
+    <position name="joint1" joint="joint1" kp="80" kv="5" />
+    <position name="joint2" joint="joint2" kp="80" kv="5" />
+    <position name="joint3" joint="joint3" kp="80" kv="5" />
+    <position name="joint4" joint="joint4" kp="40" kv="5" />
+    <position name="joint5" joint="joint5" kp="10" kv="1.5" />
+    <position name="joint6" joint="joint6" kp="10" kv="1.5" />
+    <position name="gripper" joint="joint7" kp="40" kv="5" forcerange="-10 10" />
+  </actuator>
+  <keyframe>
+    <key name="home" qpos="0 1.57 -1.3485 0 0 0 0.02 -0.02" ctrl="0 1.57 -1.3485 0 0 0 0.02" />
+  </keyframe>
+  <statistic center="0.2 0 0.3" extent="1.0" />
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0" />
+    <global azimuth="135" elevation="-20" />
+  </visual>
+</mujoco>

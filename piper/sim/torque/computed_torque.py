@@ -8,7 +8,7 @@ import pinocchio as pin
 
 from piper.controllers.pinocchio_controller import PinocchioControl
 from piper.interface.mujoco import MujocoInterface
-from piper.models import OFFICIAL_MODEL
+from piper.models import MUJOCO_MODEL, OFFICIAL_MODEL
 
 
 GRIPPER_WIDTH = 0.04
@@ -21,8 +21,9 @@ INITIAL_POSITION = np.array([0.249335, 0.0308932, 0.266156])
 class TorqueSimulation:
     """负责目标球、IK 调度和仿真步进；力矩计算在 PinocchioControl 中。"""
 
-    def __init__(self):
-        self.sim = MujocoInterface(mode="torque")
+    def __init__(self, model_path=MUJOCO_MODEL):
+        self.sim = MujocoInterface(mode="torque", model_path=model_path)
+        # 控制器始终使用原始参数，不读取仿真被控对象的惯性和摩擦。
         self.control = PinocchioControl(model_path=OFFICIAL_MODEL, gripper_width=GRIPPER_WIDTH)
         self.q_target = self.control.ik(np.zeros(6), INITIAL_POSITION)
         self.sim.data.qpos[self.sim.q_ids] = self.q_target
@@ -49,13 +50,16 @@ class TorqueSimulation:
 def main():
     parser = argparse.ArgumentParser(description="PiPER IK + M(q) 关节空间力矩仿真")
     parser.add_argument("--headless", action="store_true", help="无窗口运行")
+    parser.add_argument("--nominal", action="store_true", help="用原模型作无参数偏差、无摩擦对照")
     parser.add_argument("--duration", type=float, default=5.0, help="无窗口运行秒数")
     args = parser.parse_args()
     if not np.isfinite(args.duration) or args.duration <= 0:
         parser.error("duration 必须为正数")
-    scene = TorqueSimulation()
+    scene = TorqueSimulation(model_path=OFFICIAL_MODEL if args.nominal else MUJOCO_MODEL)
     sim = scene.sim
     print("IK 求 q目标 → e=q目标-q → tau=M(q)@(Kp*e-Kd*dq)+C*dq+g。")
+    print("仿真模型:", OFFICIAL_MODEL if args.nominal else MUJOCO_MODEL)
+    print("控制模型:", OFFICIAL_MODEL)
     print("IK 约束 XYZ 与工具水平，yaw 自由；求解后六个关节跟踪选定的 IK 解。")
     if args.headless:
         while sim.data.time < args.duration:
