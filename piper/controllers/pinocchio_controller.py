@@ -66,19 +66,32 @@ class PinocchioControl:
         error 由调用方计算，顺序 joint1～joint6，单位 rad。kp/kd 可为
         非负标量或六轴向量，单位 s^-2、s^-1。接口负责执行器力矩限幅。
         """
+        return self.computed_torque_components(q, dq, error, kp, kd)["torque"]
+
+    def computed_torque_components(self, q, dq, error, kp=100.0, kd=20.0):
+        """用 CRBA 拆分惯性纠偏、科氏/离心和重力力矩，全部为输出端 N·m。
+
+        返回 mass（质量矩阵）、inertia（M·PD）、coriolis（C·dq）、gravity
+        和 torque（前三个力矩分量之和）。所有数组均脱离 Pinocchio 缓存。
+        """
         q, dq, error = vector(q, 6), vector(dq, 6), vector(error, 6)
         kp = vector(np.broadcast_to(np.asarray(kp, dtype=float), (6,)), 6)
         kd = vector(np.broadcast_to(np.asarray(kd, dtype=float), (6,)), 6)
         if np.any(kp < 0) or np.any(kd < 0):
             raise ValueError("Kp 和 Kd 必须非负")
         ddq_command = kp * error - kd * dq
-        # RNEA 直接计算 M(q) @ ddq_command + C(q,dq) @ dq + g(q)。
-        # 等价的 CRBA 写法（需要单独使用质量矩阵时）：
-        # mass = pin.crba(self.model, self.data, q).copy()
-        # mass = np.triu(mass) + np.triu(mass, 1).T  # 补全对称下三角
-        # nonlinear = pin.nonLinearEffects(self.model, self.data, q, dq).copy()
-        # torque = mass @ ddq_command + nonlinear
-        return pin.rnea(self.model, self.data, q, dq, ddq_command).copy()
+        mass = pin.crba(self.model, self.data, q).copy()
+        mass = np.triu(mass) + np.triu(mass, 1).T  # CRBA 只保证上三角有效。
+        inertia = mass @ ddq_command
+        gravity = pin.computeGeneralizedGravity(self.model, self.data, q).copy()
+        # nonLinearEffects 已包含重力，先扣除它，避免重复叠加 g(q)。
+        nonlinear = pin.nonLinearEffects(self.model, self.data, q, dq).copy()
+        coriolis = nonlinear - gravity
+        torque = inertia + coriolis + gravity
+        # 等价 RNEA 写法：直接返回总力矩，无法从返回值中单独观察各项贡献。
+        # torque = pin.rnea(self.model, self.data, q, dq, ddq_command).copy()
+        return {"mass": mass, "inertia": inertia, "coriolis": coriolis,
+                "gravity": gravity, "torque": torque}
 
     def ik(self, joint_positions, target_position,check=True):
         """求目标位置的六轴角度；工具保持水平，世界 yaw 自由，失败则返回初始 q。"""

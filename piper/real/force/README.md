@@ -42,7 +42,14 @@ tau = g(q) + J_xyz.T @ F
 
 ```text
 e = q_target - q
-tau = M(q) @ (KP * e - KD * dq) + C(q,dq) @ dq + g(q)
+I += KI * e * dt
+tau_I = clip(M(q) @ I, -0.5, 0.5)
+I = solve(M(q), tau_I)  # 回写限幅后的积分状态，防止积分累积
+tau = M(q) @ (KP * e - KD * dq + I) + C(q,dq) @ dq + g(q)
 ```
 
-力矩计算调用 `PinocchioControl.computed_torque()`；KP=100 s^-2、KD=20 s^-1，六轴参数在 `Mq_pd.py` 顶部配置。dq 为关节角按实际时间差分、经 10 Hz 低通得到的估计值。目标关节速度为零；IK 虽不约束 yaw，但得到具体关节解后，六个关节均跟踪该解。力矩通过新接口以 N·m 发送，MIT `kp=kd=0`，避免重复叠加关节 PD；指令由接口按 SDK 力矩范围限幅。打印给定值为接口限幅前的力矩，反馈为 SDK 的电流估算值。退出或异常时关闭数字孪生，并调用接口的位置保持退出逻辑。
+力矩计算调用 `PinocchioControl.computed_torque_components()`，通过 CRBA 得到质量矩阵，并分开计算、打印 `M(q) @ (KP*e-KD*dq)`、`C(q,dq) @ dq` 和 `g(q)`。三项之和再加 M(q)·I 的积分补偿力矩，就是接口限幅前的给定力矩；`nonLinearEffects()` 自带重力，因此计算 C·dq 时先减去 g，不重复叠加。等价的 RNEA 写法留在控制器注释中；原 `computed_torque()` 仍返回同一总力矩。
+
+当前入口 KP=80 s^-2、KD=5 s^-1，六轴参数在 `Mq_pd.py` 顶部配置。dq 为关节角按实际时间差分、经 10 Hz 低通得到的估计值。目标关节速度为零；IK 虽不约束 yaw，但得到具体关节解后，六个关节均跟踪该解。保留现有发送参数 `positions=q_target, kp=0.1, kd=0.01`；这些 MIT 内部增益的贡献不包含在上述上位机前馈分项中。指令由接口按 SDK 力矩范围限幅；反馈为 SDK 的电流估算值。退出或异常时关闭数字孪生，并调用接口的位置保持退出逻辑。
+
+积分增益 KI=0.1 s^-3，按实际周期积分关节误差，积分项放在 M(q) 内与 PD 一起计算。每周期将 M(q)·I 的各关节力矩限制在 ±0.5 N·m，再通过 solve(M(q), tau_I) 回写积分状态，防止饱和后继续累积。接受新的 IK 目标时清零，IK 拒绝时保留。日志单独打印 M(q)·I 的力矩贡献；此上限只限制积分项，总力矩仍包含 M(q)·PD、C·dq 和重力。
